@@ -3,157 +3,214 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ponto Inteligente DP — Conferência</title>
+<title>Ponto Inteligente DP — Painel</title>
 <style>
-  :root{ --azul:#1d4ed8; --verde:#16a34a; --vermelho:#dc2626; --amarelo:#d97706;
-    --ink:#0f172a; --muted:#64748b; --linha:#e2e8f0; --bg:#eef2f9; }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif}
-  header{background:var(--azul);color:#fff;padding:16px 20px;text-align:center;position:relative}
-  header h1{margin:0;font-size:19px}
-  header p{margin:4px 0 0;font-size:13px;opacity:.9}
-  header .sair{position:absolute;right:14px;top:16px;font-size:13px;color:#dbe6ff;cursor:pointer;text-decoration:underline}
-  .wrap{max-width:680px;margin:0 auto;padding:18px}
-  .card{background:#fff;border:1px solid var(--linha);border-radius:16px;padding:22px;box-shadow:0 6px 20px rgba(16,33,71,.07)}
-  .quem{font-size:20px;font-weight:800;margin:0 0 2px}
-  .meta{color:var(--muted);font-size:14px;margin-bottom:16px}
-  .achado{display:inline-block;background:#eaf0ff;color:#1e3a8a;font-weight:700;font-size:14px;padding:6px 12px;border-radius:999px;margin-bottom:12px}
-  .expl{font-size:16px;line-height:1.6;background:#f7f9fe;border:1px solid var(--linha);border-radius:12px;padding:14px;margin-bottom:14px}
-  .linha{display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:8px 0;border-bottom:1px solid var(--linha)}
-  .linha span{color:var(--muted)}
-  .pergunta{text-align:center;font-size:17px;font-weight:700;margin:20px 0 14px}
-  .botoes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .botoes button{border:0;border-radius:14px;padding:18px;font-size:17px;font-weight:800;color:#fff;cursor:pointer}
-  .sim{background:var(--verde)} .nao{background:var(--vermelho)}
-  .pular{margin-top:12px;width:100%;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:12px;font-size:14px;color:var(--muted);cursor:pointer}
-  .obs{width:100%;margin-top:12px;border:1px solid var(--linha);border-radius:10px;padding:10px;font-size:14px;font-family:inherit}
-  .prog{font-size:14px;color:var(--muted);text-align:center;margin:6px 0 14px}
-  .fim{text-align:center} .fim .big{font-size:46px;font-weight:800;color:var(--azul);margin:8px 0}
+  :root{ --azul:#1d4ed8; --azul2:#2563eb; --sidebar:#0f2747; --ink:#0f172a; --muted:#64748b;
+    --linha:#e6e9f0; --bg:#eef2f9; --vermelho:#dc2626; --amarelo:#d97706; --verde:#16a34a;
+    --red-s:#fde8e8; --yel-s:#fef3da; --blue-s:#eaf0ff; --grn-s:#e7f6ec; --gry-s:#eef1f5; }
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  button{font-family:inherit;cursor:pointer} .hidden{display:none !important}
   /* login */
   .login{max-width:380px;margin:8vh auto;background:#fff;border:1px solid var(--linha);border-radius:16px;padding:28px;box-shadow:0 6px 20px rgba(16,33,71,.08)}
-  .login h2{margin:0 0 4px;font-size:20px}
-  .login p{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .login h2{margin:0 0 4px} .login p{margin:0 0 18px;color:var(--muted);font-size:13px}
   .login label{font-size:13px;color:var(--muted);font-weight:600}
   .login input{width:100%;padding:12px;border:1px solid var(--linha);border-radius:10px;margin:6px 0 14px;font-size:15px}
-  .login button{width:100%;background:var(--azul);color:#fff;border:0;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
-  .erro{color:var(--vermelho);font-size:13px;margin-top:10px;min-height:18px}
+  .login button{width:100%;background:var(--azul);color:#fff;border:0;border-radius:10px;padding:13px;font-size:15px;font-weight:700}
+  .erro{color:var(--vermelho);font-size:13px;min-height:18px}
+  /* app */
+  #app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+  aside{background:var(--sidebar);color:#cdd8ea;padding:18px 12px}
+  aside .brand{color:#fff;font-weight:700;font-size:15px;padding:6px 10px 16px;line-height:1.3}
+  aside .brand small{display:block;color:#8fa6c8;font-weight:500;font-size:11px;margin-top:3px}
+  aside nav a{display:block;padding:11px 12px;border-radius:9px;color:#cdd8ea;font-size:14px;margin-bottom:2px;cursor:pointer}
+  aside nav a:hover{background:rgba(255,255,255,.06);color:#fff} aside nav a.on{background:var(--azul);color:#fff;font-weight:600}
+  .topbar{display:flex;justify-content:space-between;align-items:center;background:#fff;border-bottom:1px solid var(--linha);padding:12px 22px;position:sticky;top:0;z-index:5}
+  .seal{background:var(--yel-s);color:var(--amarelo);font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px}
+  .topbar .u{font-size:13px;color:var(--muted)} .topbar .u b{color:var(--ink)} .sair{color:var(--azul);cursor:pointer;margin-left:10px}
+  .content{padding:22px;max-width:1200px}
+  h2.page{margin:0 0 2px;font-size:21px} .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  .card{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:16px}
+  .kpi h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .kpi .big{font-size:28px;font-weight:800} .kpi .s{font-size:12px;color:var(--muted);margin-top:4px}
+  .kpi.alert .big{color:var(--vermelho)} .kpi.warn .big{color:var(--amarelo)} .kpi.good .big{color:var(--verde)}
+  section.block{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px;margin-top:16px}
+  section.block h3{margin:0 0 12px;font-size:15px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px} @media(max-width:900px){.row2{grid-template-columns:1fr}#app{grid-template-columns:1fr}}
+  .bars{display:flex;flex-direction:column;gap:8px} .bar{display:flex;align-items:center;gap:10px;font-size:13px}
+  .bar .l{width:150px;color:var(--ink)} .bar .t{flex:1;background:#eef2fb;border-radius:6px;height:12px} .bar .f{height:100%;background:var(--azul2);border-radius:6px} .bar b{width:34px;text-align:right}
+  table{width:100%;border-collapse:collapse} th,td{text-align:left;padding:9px 10px;font-size:13px;border-bottom:1px solid var(--linha);vertical-align:middle}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase} tbody tr:hover{background:#fafbfe;cursor:pointer}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+  .c-red{background:var(--red-s);color:var(--vermelho)} .c-yel{background:var(--yel-s);color:var(--amarelo)} .c-blue{background:var(--blue-s);color:var(--azul)} .c-grn{background:var(--grn-s);color:var(--verde)} .c-gry{background:var(--gry-s);color:var(--muted)}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .filters input,.filters select{padding:8px 10px;border:1px solid var(--linha);border-radius:8px;font-size:13px;background:#fff}
+  .btn{background:var(--azul);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600} .btn.g{background:var(--blue-s);color:var(--azul)}
+  .muted{color:var(--muted)} .note{font-size:12px;color:var(--muted);margin-top:8px}
+  #ov{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;justify-content:flex-end;z-index:20}
+  #dr{width:520px;max-width:94vw;background:#fff;height:100%;overflow:auto;padding:22px}
+  .kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--linha);font-size:13px} .kv span{color:var(--muted)}
+  .expl{background:#f7f9fe;border:1px solid var(--linha);border-radius:10px;padding:12px;font-size:13px;margin:12px 0}
+  .opts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0} .opts button{border:1px solid var(--linha);background:#fff;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600} .opts button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  textarea{width:100%;border:1px solid var(--linha);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;min-height:56px}
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="root"></div>
 
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-const SUPABASE_URL = 'https://zpweiqjgmtggglfrzixu.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwd2VpcWpnbXRnZ2dsZnJ6aXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTcwNTQsImV4cCI6MjA5NzYzMzA1NH0.4H0FP1ZB9VxEZXzxBMuUIAibW3hK5WSu61U60Nnk79M';
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
-const APP = document.getElementById('app');
+const sb = createClient('https://zpweiqjgmtggglfrzixu.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwd2VpcWpnbXRnZ2dsZnJ6aXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTcwNTQsImV4cCI6MjA5NzYzMzA1NH0.4H0FP1ZB9VxEZXzxBMuUIAibW3hK5WSu61U60Nnk79M');
+const ROOT = document.getElementById('root');
 
-const LABEL = {
-  atraso:'Atraso na entrada', saida_ausente:'Saída ausente', entrada_ausente:'Entrada ausente',
-  escala_ativa_sem_marcacao:'Dia de trabalho sem marcação', marcacoes_duplicadas:'Marcações duplicadas',
-  marcacoes_abaixo_esperado:'Marcações abaixo do esperado', intervalo_incompleto:'Intervalo incompleto',
-  saida_antecipada:'Saída antecipada', jornada_abaixo:'Jornada abaixo do previsto',
-  jornada_acima:'Jornada acima do previsto', possivel_hora_extra:'Possível hora extra',
-  possivel_extrapolacao_jornada:'Possível extrapolação de jornada',
-  marcacao_incompativel_escala:'Marcação incompatível com a escala',
-  jornada_atravessa_meia_noite:'Jornada que cruza a meia-noite',
-  inconsistencia_feriado_folga:'Batida em folga/feriado', escala_nao_encontrada:'Escala não encontrada'
-};
-const diaBR = d => d ? d.split('-').reverse().join('/') : '—';
-let userId = null;
+const LABEL = {atraso:'Atraso',saida_ausente:'Saída ausente',entrada_ausente:'Entrada ausente',escala_ativa_sem_marcacao:'Sem marcação',marcacoes_duplicadas:'Batidas duplicadas',marcacoes_abaixo_esperado:'Abaixo do esperado',intervalo_incompleto:'Intervalo incompleto',saida_antecipada:'Saída antecipada',jornada_abaixo:'Jornada abaixo',jornada_acima:'Jornada acima',possivel_hora_extra:'Possível hora extra',possivel_extrapolacao_jornada:'Extrapolação de jornada',marcacao_incompativel_escala:'Incompatível com escala',jornada_atravessa_meia_noite:'Cruza a meia-noite',inconsistencia_feriado_folga:'Batida em folga/feriado',escala_nao_encontrada:'Escala não encontrada'};
+const STL = {aberta:'Aberta',aguardando_revisao:'Aguardando',confirmada:'Confirmada',falso_positivo:'Falso positivo',resolvida_na_fonte:'Resolvida na Sólides',dados_insuficientes:'Dados insuficientes',necessita_revisao_regra:'Revisar regra'};
+const tl = t => LABEL[t]||t;
+const stl = s => STL[s]||s;
+const dBR = d => d ? d.split('-').reverse().join('/') : '—';
+const sevC = s => (s==='critica'||s==='alta')?'c-red':s==='media'?'c-yel':s==='baixa'?'c-blue':'c-gry';
+const stC = s => ({aberta:'c-blue',aguardando_revisao:'c-yel',confirmada:'c-red',falso_positivo:'c-gry',resolvida_na_fonte:'c-grn',dados_insuficientes:'c-gry',necessita_revisao_regra:'c-gry'})[s]||'c-gry';
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao';
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
-  if(session){ userId = session.user.id; return renderApp(); }
-  renderLogin();
+  if(session){ USER=session.user; await afterLogin(); } else renderLogin();
 }
-
 function renderLogin(msg){
-  APP.innerHTML = `
-    <div class="login">
-      <h2>Ponto Inteligente DP</h2>
-      <p>Conferência de ponto — acesso do Departamento Pessoal</p>
-      <label>E-mail</label>
-      <input id="email" type="email" placeholder="seu.email@velper.com.br" />
-      <label>Senha</label>
-      <input id="senha" type="password" placeholder="sua senha" />
-      <button id="entrar">Entrar</button>
-      <div class="erro">${msg||''}</div>
-    </div>`;
-  document.getElementById('entrar').onclick = entrar;
-  document.getElementById('senha').addEventListener('keydown',e=>{ if(e.key==='Enter') entrar(); });
+  ROOT.innerHTML = `<div class="login"><h2>Ponto Inteligente DP</h2>
+    <p>Painel do Departamento Pessoal — acesso interno</p>
+    <label>E-mail</label><input id="e" type="email" placeholder="seu.email@velper.com.br"/>
+    <label>Senha</label><input id="s" type="password" placeholder="sua senha"/>
+    <button id="b">Entrar</button><div class="erro">${msg||''}</div></div>`;
+  const go=async()=>{const{data,error}=await sb.auth.signInWithPassword({email:document.getElementById('e').value.trim(),password:document.getElementById('s').value});
+    if(error)return renderLogin('E-mail ou senha incorretos.');USER=data.user;afterLogin();};
+  document.getElementById('b').onclick=go;
+  document.getElementById('s').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
 }
-async function entrar(){
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('senha').value;
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if(error){ return renderLogin('E-mail ou senha incorretos. Tente de novo.'); }
-  userId = data.user.id; renderApp();
+async function afterLogin(){
+  const r=await sb.from('user_roles').select('role').eq('is_active',true);
+  if(r.data&&r.data.length){ ROLE = r.data.some(x=>x.role==='owner')?'owner':r.data[0].role; }
+  await loadExceptions(); renderApp();
 }
-async function sair(){ await sb.auth.signOut(); userId=null; renderLogin(); }
-
-async function counts(){
-  const tot = await sb.from('timekeeping_exceptions').select('id',{count:'exact',head:true});
-  const ab = await sb.from('timekeeping_exceptions').select('id',{count:'exact',head:true}).eq('status','aberta');
-  return { total: tot.count||0, abertas: ab.count||0 };
-}
-
-async function renderApp(){
-  APP.innerHTML = `
-    <header><h1>Ponto Inteligente DP — Conferência</h1>
-      <p>Você só diz se o robô acertou ou não</p>
-      <span class="sair" id="sair">Sair</span></header>
-    <div class="wrap" id="wrap">Carregando…</div>`;
-  document.getElementById('sair').onclick = sair;
-  proximo();
-}
-
-async function proximo(){
-  const W = document.getElementById('wrap');
-  const { total, abertas } = await counts();
-  const conferidas = total - abertas;
-  if(abertas === 0){
-    W.innerHTML = `<div class="card fim"><div>Tudo conferido. Obrigada!</div>
-      <div class="big">${conferidas}</div><div>apontamentos conferidos de ${total}</div></div>`;
-    return;
+async function loadExceptions(){
+  EXC=[]; let from=0; const size=1000;
+  for(let i=0;i<10;i++){
+    const { data } = await sb.from('timekeeping_exceptions').select('*').order('analyzed_date',{ascending:false}).range(from,from+size-1);
+    if(!data||!data.length)break; EXC.push(...data); if(data.length<size)break; from+=size;
   }
-  const { data, error } = await sb.from('timekeeping_exceptions')
-    .select('*').eq('status','aberta').order('analyzed_date',{ascending:false}).limit(1);
-  if(error){ W.innerHTML = `<div class="card">Erro ao carregar: ${error.message}</div>`; return; }
-  const e = data[0];
-  W.innerHTML = `
-    <div class="prog">Conferidos ${conferidas} de ${total} · faltam ${abertas}</div>
-    <div class="card">
-      <div class="quem">${e.display_name}</div>
-      <div class="meta">Filial: ${e.plant||'—'} · Dia: ${diaBR(e.analyzed_date)}</div>
-      <div class="achado">O robô apontou: ${LABEL[e.exception_type]||e.exception_type}</div>
-      <div class="expl">${e.explanation}</div>
-      <div class="linha"><span>Escala prevista</span><b>${e.schedule_preview||'—'}</b></div>
-      <div class="linha"><span>Batidas registradas</span><b>${e.punches_preview||'—'}</b></div>
-      <div class="pergunta">Conferindo no ponto: o robô acertou? É pendência de verdade?</div>
-      <div class="botoes">
-        <button class="sim" id="bsim">Sim, acertou</button>
-        <button class="nao" id="bnao">Não, falso alerta</button>
+}
+function countBy(arr,key){const o={};for(const a of arr)o[a[key]]=(o[a[key]]||0)+1;return o;}
+function bars(obj){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);const m=Math.max(1,...e.map(x=>x[1]));
+  return `<div class="bars">${e.map(([k,v])=>`<div class="bar"><div class="l">${esc(tl(k))}</div><div class="t"><div class="f" style="width:${v/m*100}%"></div></div><b>${v}</b></div>`).join('')||'<span class="muted">Sem dados</span>'}</div>`;}
+
+function renderApp(){
+  const menu=[['visao','Visão geral'],['exc','Exceções'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
+  ROOT.innerHTML=`<div id="app">
+    <aside><div class="brand">Ponto Inteligente DP<small>Grupo Velper · DP</small></div>
+      <nav>${menu.map(m=>`<a data-k="${m[0]}" class="${m[0]===TAB?'on':''}">${m[1]}</a>`).join('')}</nav></aside>
+    <main><div class="topbar"><span class="seal">Modo piloto — somente leitura na Sólides</span>
+      <div class="u">Conectado: <b>${esc(USER.email)}</b> (${ROLE})<span class="sair" id="sair">Sair</span></div></div>
+      <div class="content" id="view"></div></main></div>`;
+  document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{TAB=a.dataset.k;renderApp();});
+  document.getElementById('sair').onclick=async()=>{await sb.auth.signOut();location.reload();};
+  ({visao,exc:vExc,fech,aud}[TAB]||visao)();
+}
+function effStatusList(){return EXC;}
+
+function visao(){
+  const V=document.getElementById('view'); const open=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
+  const crit=EXC.filter(e=>['critica','alta'].includes(e.severity));
+  V.innerHTML=`<h2 class="page">Visão geral</h2><p class="sub">Todas as divergências de ponto identificadas pelo robô.</p>
+    <div class="grid">
+      ${kpi('Total de divergências',EXC.length,'no período')}
+      ${kpi('Abertas / a tratar',open.length,'aguardando','')}
+      ${kpi('Críticas (alta)',crit.length,'prioridade','alert')}
+      ${kpi('Confirmadas',EXC.filter(e=>e.status==='confirmada').length,'pendência real','warn')}
+      ${kpi('Falsos positivos',EXC.filter(e=>e.status==='falso_positivo').length,'ajuste de regra','')}
+      ${kpi('Resolvidas',EXC.filter(e=>e.status==='resolvida_na_fonte').length,'na Sólides','good')}
+    </div>
+    <div class="row2" style="margin-top:16px">
+      <section class="block"><h3>Por filial</h3>${bars(countBy(EXC,'plant'))}</section>
+      <section class="block"><h3>Por tipo</h3>${bars(countBy(EXC,'exception_type'))}</section>
+    </div>
+    <section class="block"><h3>Mais críticas</h3>
+      <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Dia</th><th>Tipo</th><th>Status</th></tr></thead>
+      <tbody>${crit.slice(0,8).map(e=>row(e)).join('')}</tbody></table></section>`;
+  bindRows(V);
+}
+function kpi(h,b,s,c=''){return `<div class="card kpi ${c}"><h3>${h}</h3><div class="big">${b}</div><div class="s">${s}</div></div>`;}
+function row(e){return `<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`;}
+function bindRows(scope){scope.querySelectorAll('tr[data-id]').forEach(tr=>tr.onclick=()=>openDrawer(tr.dataset.id));}
+
+function vExc(){
+  const V=document.getElementById('view');
+  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort();
+  V.innerHTML=`<h2 class="page">Exceções</h2><p class="sub">Fila completa — filtre, abra e classifique.</p>
+    <section class="block">
+      <div class="filters">
+        <input id="fq" placeholder="Buscar colaborador..."/>
+        <select id="ffil"><option value="">Todas as filiais</option>${filiais.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
+        <select id="fset"><option value="">Todos os setores</option>${setores.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
+        <select id="ftip"><option value="">Todos os tipos</option>${tipos.map(t=>`<option value="${t}">${esc(tl(t))}</option>`).join('')}</select>
+        <select id="fsev"><option value="">Toda gravidade</option><option value="alta">alta</option><option value="media">media</option><option value="baixa">baixa</option></select>
+        <select id="fst"><option value="">Todo status</option>${Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('')}</select>
+        <button class="btn g" id="csv">Exportar CSV</button>
       </div>
-      <input class="obs" id="obs" placeholder="Observação (opcional)" />
-      <button class="pular" id="bpular">Não sei agora — pular</button>
-    </div>`;
-  document.getElementById('bsim').onclick = ()=>classificar(e,'confirmada');
-  document.getElementById('bnao').onclick = ()=>classificar(e,'falso_positivo');
-  document.getElementById('bpular').onclick = ()=>classificar(e,'aguardando_revisao');
+      <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Setor</th><th>Dia</th><th>Tipo</th><th>Grav.</th><th>Status</th></tr></thead>
+      <tbody id="tb"></tbody></table><p class="note" id="cnt"></p>
+    </section>`;
+  const draw=()=>{
+    const q=val('fq').toLowerCase(),fl=val('ffil'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
+    const rows=EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!fl||e.plant===fl)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));
+    document.getElementById('tb').innerHTML=rows.slice(0,400).map(e=>`<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${esc(e.department)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${sevC(e.severity)}">${e.severity}</span></td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`).join('');
+    document.getElementById('cnt').textContent=`${rows.length} de ${EXC.length} divergências`+(rows.length>400?' (mostrando 400)':'');
+    bindRows(document.getElementById('tb'));
+    window.__rows=rows;
+  };
+  ['fq','ffil','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
+  document.getElementById('csv').onclick=()=>{const h=['data','colaborador','filial','setor','tipo','gravidade','status','explicacao'];
+    const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
+    const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
+  draw();
+}
+function val(id){const e=document.getElementById(id);return e?e.value:'';}
+
+function openDrawer(id){
+  const e=EXC.find(x=>String(x.id)===String(id));if(!e)return;
+  const opts=[['confirmada','Pendência confirmada'],['falso_positivo','Falso positivo'],['resolvida_na_fonte','Resolvida na Sólides'],['dados_insuficientes','Dados insuficientes'],['aguardando_revisao','Aguardando análise']];
+  document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${esc(e.display_name)}</h3><button class="btn g" id="fx">Fechar</button></div>
+    <p class="muted">${esc(e.plant)} · ${esc(e.department)} · ${esc(e.schedule_name)}</p>
+    <div class="kv"><span>Dia</span><b>${dBR(e.analyzed_date)}</b></div>
+    <div class="kv"><span>Tipo</span><b>${esc(tl(e.exception_type))}</b></div>
+    <div class="kv"><span>Gravidade</span><span class="pill ${sevC(e.severity)}">${e.severity}</span></div>
+    <div class="kv"><span>Status</span><span class="pill ${stC(e.status)}">${stl(e.status)}</span></div>
+    <div class="kv"><span>Escala prevista</span><b>${esc(e.schedule_preview)}</b></div>
+    <div class="kv"><span>Batidas registradas</span><b>${esc(e.punches_preview)}</b></div>
+    <div class="expl"><b>Explicação:</b><br>${esc(e.explanation)}</div>
+    <p class="muted" style="margin-bottom:4px"><b>Classificar:</b></p>
+    <div class="opts" id="op">${opts.map(o=>`<button data-k="${o[0]}" class="${e.status===o[0]?'on':''}">${o[1]}</button>`).join('')}</div>
+    <textarea id="obs" placeholder="Observação (opcional)">${esc(e.operational_note)}</textarea>
+    <div style="margin-top:12px"><button class="btn" id="save">Salvar classificação</button></div>
+  </div></div>`);
+  const ov=document.getElementById('ov');
+  ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();};
+  document.getElementById('fx').onclick=()=>ov.remove();
+  document.querySelectorAll('#op button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#op button').forEach(x=>x.classList.remove('on'));b.classList.add('on');});
+  document.getElementById('save').onclick=async()=>{
+    const sel=document.querySelector('#op button.on');if(!sel){alert('Escolha uma classificação.');return;}
+    const novo=sel.dataset.k, obs=document.getElementById('obs').value||null;
+    await sb.from('timekeeping_exceptions').update({status:novo,validated_by:USER.id,validated_at:new Date().toISOString(),operational_note:obs}).eq('id',e.id);
+    await sb.from('exception_status_history').insert({exception_id:e.id,old_status:e.status,new_status:novo,note:obs,changed_by:USER.id});
+    e.status=novo; e.operational_note=obs; ov.remove(); renderApp();
+  };
 }
 
-async function classificar(e, novo){
-  const obs = (document.getElementById('obs')||{}).value || null;
-  await sb.from('timekeeping_exceptions').update({
-    status: novo, validated_by: userId, validated_at: new Date().toISOString(), operational_note: obs
-  }).eq('id', e.id);
-  await sb.from('exception_status_history').insert({
-    exception_id: e.id, old_status: 'aberta', new_status: novo, note: obs, changed_by: userId
-  });
-  proximo();
-}
+function fech(){document.getElementById('view').innerHTML=`<h2 class="page">Fechamento mensal</h2><p class="sub">Double Check da competência.</p><section class="block"><p class="muted">O fechamento mensal automático (reprocessa toda a competência e concilia) será ativado após a validação diária do piloto. Por enquanto, a operação é a conferência diária na aba <b>Exceções</b>.</p></section>`;}
+function aud(){document.getElementById('view').innerHTML=`<h2 class="page">Auditoria</h2><p class="sub">Registro de classificações.</p><section class="block"><p class="muted">A trilha de auditoria detalhada aparece aqui conforme o uso (quem classificou o quê). Visível apenas para o owner.</p></section>`;}
 
 boot();
 </script>
