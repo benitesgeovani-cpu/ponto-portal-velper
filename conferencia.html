@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ponto Inteligente DP — Conferência</title>
+<style>
+  :root{ --azul:#1d4ed8; --verde:#16a34a; --vermelho:#dc2626; --amarelo:#d97706;
+    --ink:#0f172a; --muted:#64748b; --linha:#e2e8f0; --bg:#eef2f9; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif}
+  header{background:var(--azul);color:#fff;padding:16px 20px;text-align:center;position:relative}
+  header h1{margin:0;font-size:19px}
+  header p{margin:4px 0 0;font-size:13px;opacity:.9}
+  header .sair{position:absolute;right:14px;top:16px;font-size:13px;color:#dbe6ff;cursor:pointer;text-decoration:underline}
+  .wrap{max-width:680px;margin:0 auto;padding:18px}
+  .card{background:#fff;border:1px solid var(--linha);border-radius:16px;padding:22px;box-shadow:0 6px 20px rgba(16,33,71,.07)}
+  .quem{font-size:20px;font-weight:800;margin:0 0 2px}
+  .meta{color:var(--muted);font-size:14px;margin-bottom:16px}
+  .achado{display:inline-block;background:#eaf0ff;color:#1e3a8a;font-weight:700;font-size:14px;padding:6px 12px;border-radius:999px;margin-bottom:12px}
+  .expl{font-size:16px;line-height:1.6;background:#f7f9fe;border:1px solid var(--linha);border-radius:12px;padding:14px;margin-bottom:14px}
+  .linha{display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:8px 0;border-bottom:1px solid var(--linha)}
+  .linha span{color:var(--muted)}
+  .pergunta{text-align:center;font-size:17px;font-weight:700;margin:20px 0 14px}
+  .botoes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .botoes button{border:0;border-radius:14px;padding:18px;font-size:17px;font-weight:800;color:#fff;cursor:pointer}
+  .sim{background:var(--verde)} .nao{background:var(--vermelho)}
+  .pular{margin-top:12px;width:100%;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:12px;font-size:14px;color:var(--muted);cursor:pointer}
+  .obs{width:100%;margin-top:12px;border:1px solid var(--linha);border-radius:10px;padding:10px;font-size:14px;font-family:inherit}
+  .prog{font-size:14px;color:var(--muted);text-align:center;margin:6px 0 14px}
+  .fim{text-align:center} .fim .big{font-size:46px;font-weight:800;color:var(--azul);margin:8px 0}
+  /* login */
+  .login{max-width:380px;margin:8vh auto;background:#fff;border:1px solid var(--linha);border-radius:16px;padding:28px;box-shadow:0 6px 20px rgba(16,33,71,.08)}
+  .login h2{margin:0 0 4px;font-size:20px}
+  .login p{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .login label{font-size:13px;color:var(--muted);font-weight:600}
+  .login input{width:100%;padding:12px;border:1px solid var(--linha);border-radius:10px;margin:6px 0 14px;font-size:15px}
+  .login button{width:100%;background:var(--azul);color:#fff;border:0;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+  .erro{color:var(--vermelho);font-size:13px;margin-top:10px;min-height:18px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const SUPABASE_URL = 'https://zpweiqjgmtggglfrzixu.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwd2VpcWpnbXRnZ2dsZnJ6aXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTcwNTQsImV4cCI6MjA5NzYzMzA1NH0.4H0FP1ZB9VxEZXzxBMuUIAibW3hK5WSu61U60Nnk79M';
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+const APP = document.getElementById('app');
+
+const LABEL = {
+  atraso:'Atraso na entrada', saida_ausente:'Saída ausente', entrada_ausente:'Entrada ausente',
+  escala_ativa_sem_marcacao:'Dia de trabalho sem marcação', marcacoes_duplicadas:'Marcações duplicadas',
+  marcacoes_abaixo_esperado:'Marcações abaixo do esperado', intervalo_incompleto:'Intervalo incompleto',
+  saida_antecipada:'Saída antecipada', jornada_abaixo:'Jornada abaixo do previsto',
+  jornada_acima:'Jornada acima do previsto', possivel_hora_extra:'Possível hora extra',
+  possivel_extrapolacao_jornada:'Possível extrapolação de jornada',
+  marcacao_incompativel_escala:'Marcação incompatível com a escala',
+  jornada_atravessa_meia_noite:'Jornada que cruza a meia-noite',
+  inconsistencia_feriado_folga:'Batida em folga/feriado', escala_nao_encontrada:'Escala não encontrada'
+};
+const diaBR = d => d ? d.split('-').reverse().join('/') : '—';
+let userId = null;
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ userId = session.user.id; return renderApp(); }
+  renderLogin();
+}
+
+function renderLogin(msg){
+  APP.innerHTML = `
+    <div class="login">
+      <h2>Ponto Inteligente DP</h2>
+      <p>Conferência de ponto — acesso do Departamento Pessoal</p>
+      <label>E-mail</label>
+      <input id="email" type="email" placeholder="seu.email@velper.com.br" />
+      <label>Senha</label>
+      <input id="senha" type="password" placeholder="sua senha" />
+      <button id="entrar">Entrar</button>
+      <div class="erro">${msg||''}</div>
+    </div>`;
+  document.getElementById('entrar').onclick = entrar;
+  document.getElementById('senha').addEventListener('keydown',e=>{ if(e.key==='Enter') entrar(); });
+}
+async function entrar(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('senha').value;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ return renderLogin('E-mail ou senha incorretos. Tente de novo.'); }
+  userId = data.user.id; renderApp();
+}
+async function sair(){ await sb.auth.signOut(); userId=null; renderLogin(); }
+
+async function counts(){
+  const tot = await sb.from('timekeeping_exceptions').select('id',{count:'exact',head:true});
+  const ab = await sb.from('timekeeping_exceptions').select('id',{count:'exact',head:true}).eq('status','aberta');
+  return { total: tot.count||0, abertas: ab.count||0 };
+}
+
+async function renderApp(){
+  APP.innerHTML = `
+    <header><h1>Ponto Inteligente DP — Conferência</h1>
+      <p>Você só diz se o robô acertou ou não</p>
+      <span class="sair" id="sair">Sair</span></header>
+    <div class="wrap" id="wrap">Carregando…</div>`;
+  document.getElementById('sair').onclick = sair;
+  proximo();
+}
+
+async function proximo(){
+  const W = document.getElementById('wrap');
+  const { total, abertas } = await counts();
+  const conferidas = total - abertas;
+  if(abertas === 0){
+    W.innerHTML = `<div class="card fim"><div>Tudo conferido. Obrigada!</div>
+      <div class="big">${conferidas}</div><div>apontamentos conferidos de ${total}</div></div>`;
+    return;
+  }
+  const { data, error } = await sb.from('timekeeping_exceptions')
+    .select('*').eq('status','aberta').order('analyzed_date',{ascending:false}).limit(1);
+  if(error){ W.innerHTML = `<div class="card">Erro ao carregar: ${error.message}</div>`; return; }
+  const e = data[0];
+  W.innerHTML = `
+    <div class="prog">Conferidos ${conferidas} de ${total} · faltam ${abertas}</div>
+    <div class="card">
+      <div class="quem">${e.display_name}</div>
+      <div class="meta">Filial: ${e.plant||'—'} · Dia: ${diaBR(e.analyzed_date)}</div>
+      <div class="achado">O robô apontou: ${LABEL[e.exception_type]||e.exception_type}</div>
+      <div class="expl">${e.explanation}</div>
+      <div class="linha"><span>Escala prevista</span><b>${e.schedule_preview||'—'}</b></div>
+      <div class="linha"><span>Batidas registradas</span><b>${e.punches_preview||'—'}</b></div>
+      <div class="pergunta">Conferindo no ponto: o robô acertou? É pendência de verdade?</div>
+      <div class="botoes">
+        <button class="sim" id="bsim">Sim, acertou</button>
+        <button class="nao" id="bnao">Não, falso alerta</button>
+      </div>
+      <input class="obs" id="obs" placeholder="Observação (opcional)" />
+      <button class="pular" id="bpular">Não sei agora — pular</button>
+    </div>`;
+  document.getElementById('bsim').onclick = ()=>classificar(e,'confirmada');
+  document.getElementById('bnao').onclick = ()=>classificar(e,'falso_positivo');
+  document.getElementById('bpular').onclick = ()=>classificar(e,'aguardando_revisao');
+}
+
+async function classificar(e, novo){
+  const obs = (document.getElementById('obs')||{}).value || null;
+  await sb.from('timekeeping_exceptions').update({
+    status: novo, validated_by: userId, validated_at: new Date().toISOString(), operational_note: obs
+  }).eq('id', e.id);
+  await sb.from('exception_status_history').insert({
+    exception_id: e.id, old_status: 'aberta', new_status: novo, note: obs, changed_by: userId
+  });
+  proximo();
+}
+
+boot();
+</script>
+</body>
+</html>
