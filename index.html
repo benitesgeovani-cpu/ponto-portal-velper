@@ -167,42 +167,43 @@ function bindRows(scope){scope.querySelectorAll('tr[data-id]').forEach(tr=>tr.on
 
 function vExc(){
   const V=document.getElementById('view');
-  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort(), dias=[...new Set(EXC.map(e=>e.analyzed_date))].sort().reverse();
+  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), empresas=[...new Set(EXC.map(e=>e.company).filter(Boolean))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort(), dias=[...new Set(EXC.map(e=>e.analyzed_date))].sort().reverse();
   V.innerHTML=`<h2 class="page">Exceções</h2><p class="sub">Agrupado por colaborador — abra um colaborador e classifique todos os apontamentos dele de uma vez. Use os filtros (dia, filial, tipo…) para escolher a forma mais prática.</p>
     <section class="block">
       <div class="filters">
         <input id="fq" placeholder="Buscar colaborador..."/>
         <select id="fdia"><option value="">Todos os dias</option>${dias.map(d=>`<option value="${d}">${dBR(d)}</option>`).join('')}</select>
-        <select id="ffil"><option value="">Todas as filiais</option>${filiais.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
+        <select id="ffil"><option value="">Todos os locais</option>${filiais.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
+        <select id="femp"><option value="">Todas as empresas</option>${empresas.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
         <select id="fset"><option value="">Todos os setores</option>${setores.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
         <select id="ftip"><option value="">Todos os tipos</option>${tipos.map(t=>`<option value="${t}">${esc(tl(t))}</option>`).join('')}</select>
         <select id="fsev"><option value="">Toda gravidade</option><option value="alta">alta</option><option value="media">media</option><option value="baixa">baixa</option></select>
         <select id="fst"><option value="">Todo status</option>${Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('')}</select>
         <button class="btn g" id="csv">Exportar CSV</button>
       </div>
-      <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Setor</th><th>Apontamentos</th><th>Abertos</th><th>Pior gravidade</th></tr></thead>
+      <table><thead><tr><th>Colaborador</th><th>Local de trabalho</th><th>Empresa</th><th>Setor</th><th>Apontamentos</th><th>Abertos</th><th>Pior gravidade</th></tr></thead>
       <tbody id="tb"></tbody></table><p class="note" id="cnt"></p>
     </section>`;
   const sevRank={critica:4,alta:3,media:2,baixa:1,informativa:0};
-  const filtered=()=>{const q=val('fq').toLowerCase(),dy=val('fdia'),fl=val('ffil'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
-    return EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!dy||e.analyzed_date===dy)&&(!fl||e.plant===fl)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));};
+  const filtered=()=>{const q=val('fq').toLowerCase(),dy=val('fdia'),fl=val('ffil'),em=val('femp'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
+    return EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!dy||e.analyzed_date===dy)&&(!fl||e.plant===fl)&&(!em||e.company===em)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));};
   const draw=()=>{
     const rows=filtered(); const byEmp=new Map();
-    for(const e of rows){const k=e.solides_internal_id;if(!byEmp.has(k))byEmp.set(k,{name:e.display_name,plant:e.plant,dep:e.department,items:[]});byEmp.get(k).items.push(e);}
+    for(const e of rows){const k=e.solides_internal_id;if(!byEmp.has(k))byEmp.set(k,{name:e.display_name,plant:e.plant,company:e.company||null,dep:e.department,items:[]});byEmp.get(k).items.push(e);}
     const groups=[...byEmp.entries()].sort((a,b)=>b[1].items.length-a[1].items.length);
     document.getElementById('tb').innerHTML=groups.slice(0,400).map(([id,g])=>{
       const ab=g.items.filter(x=>['aberta','aguardando_revisao','confirmada'].includes(x.status)).length;
       const wr=g.items.reduce((m,x)=>Math.max(m,sevRank[x.severity]||0),0);
       const ws=['informativa','baixa','media','alta','critica'][wr]||'baixa';
-      return `<tr data-emp="${esc(id)}"><td>${esc(g.name)}</td><td>${esc(g.plant)}</td><td>${esc(g.dep)}</td><td><b>${g.items.length}</b></td><td>${ab}</td><td><span class="pill ${sevC(ws)}">${ws}</span></td></tr>`;
+      return `<tr data-emp="${esc(id)}"><td>${esc(g.name)}</td><td>${esc(g.plant)}</td><td>${g.company?`<span style="font-size:11px">${esc(g.company)}</span>`:'<span class="muted">—</span>'}</td><td>${esc(g.dep)}</td><td><b>${g.items.length}</b></td><td>${ab}</td><td><span class="pill ${sevC(ws)}">${ws}</span></td></tr>`;
     }).join('');
     document.getElementById('cnt').textContent=`${groups.length} colaboradores · ${rows.length} apontamentos`;
     document.querySelectorAll('#tb tr[data-emp]').forEach(tr=>tr.onclick=()=>openColaborador(tr.dataset.emp));
     window.__rows=rows;
   };
-  ['fq','fdia','ffil','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
-  document.getElementById('csv').onclick=()=>{const h=['data','colaborador','filial','setor','tipo','gravidade','status','explicacao'];
-    const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
+  ['fq','fdia','ffil','femp','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
+  document.getElementById('csv').onclick=()=>{const h=['data','colaborador','local_trabalho','empresa','setor','tipo','gravidade','status','explicacao'];
+    const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.company||'',e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
     const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
   if(PRESET){
     if(typeof PRESET==='object'){
@@ -229,6 +230,7 @@ function openDrawer(id){
   document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
     <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${esc(e.display_name)}</h3><button class="btn g" id="fx">Fechar</button></div>
     <p class="muted">${esc(e.plant)} · ${esc(e.department)} · ${esc(e.schedule_name)}</p>
+    ${e.company?`<p class="muted" style="margin-top:-8px;font-size:12px">Empresa: ${esc(e.company)}</p>`:''}
     <div class="kv"><span>Dia</span><b>${dBR(e.analyzed_date)}</b></div>
     <div class="kv"><span>Tipo</span><b>${esc(tl(e.exception_type))}</b></div>
     <div class="kv"><span>Gravidade</span><span class="pill ${sevC(e.severity)}">${e.severity}</span></div>
@@ -270,7 +272,7 @@ function openColaborador(empId){
   </div>`).join('');
   document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
     <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${esc(g.name)}</h3><button class="btn g" id="fx">Fechar</button></div>
-    <p class="muted">${esc(g.plant)} · ${esc(g.dep||g.department)} · ${items.length} apontamento(s)${dy?(' · '+dBR(dy)):''}</p>${cards}</div></div>`);
+    <p class="muted">${esc(g.plant)} · ${esc(g.dep||g.department)} · ${items.length} apontamento(s)${dy?(' · '+dBR(dy)):''}${g.company?(' · '+esc(g.company)):''}</p>${cards}</div></div>`);
   const ov=document.getElementById('ov'); ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();}; document.getElementById('fx').onclick=()=>ov.remove();
   document.querySelectorAll('#dr [data-card]').forEach(card=>{
     const e=items.find(x=>String(x.id)===card.dataset.card);
@@ -303,7 +305,7 @@ async function fech(){
   let MGMT=[]; let from=0;
   for(let i=0;i<10;i++){
     const {data}=await sb.from('timekeeping_exceptions')
-      .select('solides_internal_id,display_name,plant,exception_type,evidence_minutes,analyzed_date,operational_note')
+      .select('solides_internal_id,display_name,plant,company,exception_type,evidence_minutes,analyzed_date,operational_note')
       .eq('status','ignorada_por_regra')
       .in('exception_type',[...TIPOS_HE,...TIPOS_JB])
       .gte('analyzed_date',de).lte('analyzed_date',ate)
@@ -314,7 +316,7 @@ async function fech(){
   const aggr=(tipos)=>{const map=new Map();
     for(const e of MGMT){if(!tipos.includes(e.exception_type))continue;
       const k=e.solides_internal_id;
-      if(!map.has(k))map.set(k,{sid:k,name:e.display_name,plant:e.plant,dias:new Set(),min:0});
+      if(!map.has(k))map.set(k,{sid:k,name:e.display_name,plant:e.plant,company:e.company||null,dias:new Set(),min:0});
       const a=map.get(k);a.dias.add(e.analyzed_date);a.min+=(e.evidence_minutes||0);
     }
     return[...map.values()].map(r=>({...r,dias:r.dias.size})).sort((a,b)=>b.min-a.min);
@@ -351,22 +353,22 @@ async function fech(){
     <section class="block">
       <h3>Horas extras ${badge(heRows.length,'c-yel')}</h3>
       <p class="note">Colaboradores que excederam a jornada contratada em pelo menos um dia. O sistema de ponto calcula normalmente — exibido aqui para ciência gerencial.</p>
-      ${mkTbl(heRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+      ${mkTbl(heRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>
 
     <section class="block">
       <h3>Abaixo da carga horária ${badge(jbRows.length,'c-red')}</h3>
       <p class="note">Colaboradores com jornada inferior ao contratado em algum dia. O ponto calcula com o que foi registrado.</p>
-      ${mkTbl(jbRows,['Colaborador','Filial','Dias','Déficit estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+      ${mkTbl(jbRows,['Colaborador','Local de trabalho','Empresa','Dias','Déficit estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>
 
     <section class="block">
       <h3>Horas extras sem justificativa ${badge(sjRows.length,'c-red')}</h3>
       <p class="note">Colaboradores com horas extras <b>e</b> erros de batida em aberto na fila do DP. A hora extra pode ser consequência de marcação irregular (ex.: esqueceu de bater a saída). Requer análise antes do fechamento.</p>
-      ${mkTbl(sjRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+      ${mkTbl(sjRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>
 
     <section class="block" style="border:2px solid ${isFechado?'var(--verde)':'var(--linha)'}">
@@ -417,19 +419,19 @@ function gerarPDF(){
   doc.text(ts(mesLabel)+' · Grupo Velper',14,25);
   doc.text('Gerado em: '+new Date().toLocaleDateString('pt-BR'),14,31);
   doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('1. Horas Extras ('+heRows.length+' colaboradores)',14,42);
-  doc.autoTable({startY:46,head:[['Colaborador','Filial','Dias','Total']],
-    body:heRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
-    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[29,78,216]},margin:{left:14,right:14}});
+  doc.autoTable({startY:46,head:[['Colaborador','Local de trabalho','Empresa','Dias','Total']],
+    body:heRows.map(r=>[ts(r.name),ts(r.plant),ts(r.company||'—'),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[29,78,216]},margin:{left:14,right:14}});
   let y=doc.lastAutoTable.finalY+10;
   doc.setFont('helvetica','bold');doc.text('2. Abaixo da Carga Horaria ('+jbRows.length+' colaboradores)',14,y);
-  doc.autoTable({startY:y+4,head:[['Colaborador','Filial','Dias','Deficit']],
-    body:jbRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
-    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[220,38,38]},margin:{left:14,right:14}});
+  doc.autoTable({startY:y+4,head:[['Colaborador','Local de trabalho','Empresa','Dias','Deficit']],
+    body:jbRows.map(r=>[ts(r.name),ts(r.plant),ts(r.company||'—'),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[220,38,38]},margin:{left:14,right:14}});
   y=doc.lastAutoTable.finalY+10;
   doc.setFont('helvetica','bold');doc.text('3. HE sem Justificativa ('+sjRows.length+' colaboradores)',14,y);
-  doc.autoTable({startY:y+4,head:[['Colaborador','Filial','Dias','Total']],
-    body:sjRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
-    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[217,119,6]},margin:{left:14,right:14}});
+  doc.autoTable({startY:y+4,head:[['Colaborador','Local de trabalho','Empresa','Dias','Total']],
+    body:sjRows.map(r=>[ts(r.name),ts(r.plant),ts(r.company||'—'),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[217,119,6]},margin:{left:14,right:14}});
   doc.save('relatorio-gerencial-'+(mes||'competencia')+'.pdf');
 }
 
@@ -439,12 +441,12 @@ function gerarExcel(){
   const XL=window.XLSX;
   const wb=XL.utils.book_new();
   const mkWs=(rows,cols,fn)=>XL.utils.aoa_to_sheet([cols,...rows.map(fn)]);
-  XL.utils.book_append_sheet(wb,mkWs(heRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'Horas Extras');
-  XL.utils.book_append_sheet(wb,mkWs(jbRows,['Colaborador','Filial','Dias','Deficit estimado'],
-    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'Abaixo da Carga');
-  XL.utils.book_append_sheet(wb,mkWs(sjRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'HE sem Justificativa');
+  XL.utils.book_append_sheet(wb,mkWs(heRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
+    r=>[r.name,r.plant,r.company||'—',r.dias,hmmfmt(r.min)]),'Horas Extras');
+  XL.utils.book_append_sheet(wb,mkWs(jbRows,['Colaborador','Local de trabalho','Empresa','Dias','Deficit estimado'],
+    r=>[r.name,r.plant,r.company||'—',r.dias,hmmfmt(r.min)]),'Abaixo da Carga');
+  XL.utils.book_append_sheet(wb,mkWs(sjRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
+    r=>[r.name,r.plant,r.company||'—',r.dias,hmmfmt(r.min)]),'HE sem Justificativa');
   XL.writeFile(wb,'relatorio-gerencial-'+(mes||'competencia')+'.xlsx');
 }
 
