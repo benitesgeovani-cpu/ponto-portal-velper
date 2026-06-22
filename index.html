@@ -73,7 +73,7 @@ const sevC = s => (s==='critica'||s==='alta')?'c-red':s==='media'?'c-yel':s==='b
 const stC = s => ({aberta:'c-blue',aguardando_revisao:'c-yel',confirmada:'c-red',falso_positivo:'c-gry',resolvida_na_fonte:'c-grn',dados_insuficientes:'c-gry',necessita_revisao_regra:'c-gry'})[s]||'c-gry';
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null;
+let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null, MES_VIGENTE='';
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -96,11 +96,18 @@ async function afterLogin(){
   await loadExceptions(); renderApp();
 }
 async function loadExceptions(){
+  // Filtra pelo mês vigente: só exceções do período atual de conferência.
+  const hoje=new Date(); const anoMes=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const de=`${anoMes}-01`; const ate=`${anoMes}-31`;
   EXC=[]; let from=0; const size=1000;
   for(let i=0;i<10;i++){
-    const { data } = await sb.from('timekeeping_exceptions').select('*').neq('status','ignorada_por_regra').order('analyzed_date',{ascending:false}).range(from,from+size-1);
+    const { data } = await sb.from('timekeeping_exceptions').select('*')
+      .neq('status','ignorada_por_regra')
+      .gte('analyzed_date',de).lte('analyzed_date',ate)
+      .order('analyzed_date',{ascending:false}).range(from,from+size-1);
     if(!data||!data.length)break; EXC.push(...data); if(data.length<size)break; from+=size;
   }
+  MES_VIGENTE=anoMes;
 }
 function countBy(arr,key){const o={};for(const a of arr)o[a[key]]=(o[a[key]]||0)+1;return o;}
 function bars(obj){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);const m=Math.max(1,...e.map(x=>x[1]));
@@ -123,7 +130,8 @@ function effStatusList(){return EXC;}
 function visao(){
   const V=document.getElementById('view'); const open=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
   const crit=EXC.filter(e=>['critica','alta'].includes(e.severity));
-  V.innerHTML=`<h2 class="page">Visão geral</h2><p class="sub">Resumo de todas as divergências. <b>Clique em um número</b> para ver a lista correspondente.</p>
+  const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
+  V.innerHTML=`<h2 class="page">Visão geral <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2><p class="sub">Divergências do mês vigente. <b>Clique em um número</b> para ver a lista correspondente.</p>
     <div class="grid">
       ${kpi('Total de divergências',EXC.length,'ver todas','','all')}
       ${kpi('Abertas / a tratar',open.length,'ver lista','','abertas')}
