@@ -148,11 +148,12 @@ function bindRows(scope){scope.querySelectorAll('tr[data-id]').forEach(tr=>tr.on
 
 function vExc(){
   const V=document.getElementById('view');
-  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort();
-  V.innerHTML=`<h2 class="page">Exceções</h2><p class="sub">Fila completa — filtre, abra e classifique.</p>
+  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort(), dias=[...new Set(EXC.map(e=>e.analyzed_date))].sort().reverse();
+  V.innerHTML=`<h2 class="page">Exceções</h2><p class="sub">Agrupado por colaborador — abra um colaborador e classifique todos os apontamentos dele de uma vez. Use os filtros (dia, filial, tipo…) para escolher a forma mais prática.</p>
     <section class="block">
       <div class="filters">
         <input id="fq" placeholder="Buscar colaborador..."/>
+        <select id="fdia"><option value="">Todos os dias</option>${dias.map(d=>`<option value="${d}">${dBR(d)}</option>`).join('')}</select>
         <select id="ffil"><option value="">Todas as filiais</option>${filiais.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
         <select id="fset"><option value="">Todos os setores</option>${setores.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
         <select id="ftip"><option value="">Todos os tipos</option>${tipos.map(t=>`<option value="${t}">${esc(tl(t))}</option>`).join('')}</select>
@@ -160,18 +161,27 @@ function vExc(){
         <select id="fst"><option value="">Todo status</option>${Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('')}</select>
         <button class="btn g" id="csv">Exportar CSV</button>
       </div>
-      <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Setor</th><th>Dia</th><th>Tipo</th><th>Grav.</th><th>Status</th></tr></thead>
+      <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Setor</th><th>Apontamentos</th><th>Abertos</th><th>Pior gravidade</th></tr></thead>
       <tbody id="tb"></tbody></table><p class="note" id="cnt"></p>
     </section>`;
+  const sevRank={critica:4,alta:3,media:2,baixa:1,informativa:0};
+  const filtered=()=>{const q=val('fq').toLowerCase(),dy=val('fdia'),fl=val('ffil'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
+    return EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!dy||e.analyzed_date===dy)&&(!fl||e.plant===fl)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));};
   const draw=()=>{
-    const q=val('fq').toLowerCase(),fl=val('ffil'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
-    const rows=EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!fl||e.plant===fl)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));
-    document.getElementById('tb').innerHTML=rows.slice(0,400).map(e=>`<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${esc(e.department)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${sevC(e.severity)}">${e.severity}</span></td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`).join('');
-    document.getElementById('cnt').textContent=`${rows.length} de ${EXC.length} divergências`+(rows.length>400?' (mostrando 400)':'');
-    bindRows(document.getElementById('tb'));
+    const rows=filtered(); const byEmp=new Map();
+    for(const e of rows){const k=e.solides_internal_id;if(!byEmp.has(k))byEmp.set(k,{name:e.display_name,plant:e.plant,dep:e.department,items:[]});byEmp.get(k).items.push(e);}
+    const groups=[...byEmp.entries()].sort((a,b)=>b[1].items.length-a[1].items.length);
+    document.getElementById('tb').innerHTML=groups.slice(0,400).map(([id,g])=>{
+      const ab=g.items.filter(x=>['aberta','aguardando_revisao','confirmada'].includes(x.status)).length;
+      const wr=g.items.reduce((m,x)=>Math.max(m,sevRank[x.severity]||0),0);
+      const ws=['informativa','baixa','media','alta','critica'][wr]||'baixa';
+      return `<tr data-emp="${esc(id)}"><td>${esc(g.name)}</td><td>${esc(g.plant)}</td><td>${esc(g.dep)}</td><td><b>${g.items.length}</b></td><td>${ab}</td><td><span class="pill ${sevC(ws)}">${ws}</span></td></tr>`;
+    }).join('');
+    document.getElementById('cnt').textContent=`${groups.length} colaboradores · ${rows.length} apontamentos`;
+    document.querySelectorAll('#tb tr[data-emp]').forEach(tr=>tr.onclick=()=>openColaborador(tr.dataset.emp));
     window.__rows=rows;
   };
-  ['fq','ffil','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
+  ['fq','fdia','ffil','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
   document.getElementById('csv').onclick=()=>{const h=['data','colaborador','filial','setor','tipo','gravidade','status','explicacao'];
     const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
     const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
@@ -218,6 +228,38 @@ function openDrawer(id){
   };
 }
 
+function openColaborador(empId){
+  const dy=val('fdia');
+  const items=EXC.filter(e=>String(e.solides_internal_id)===String(empId)&&(!dy||e.analyzed_date===dy)).sort((a,b)=>(b.analyzed_date||'').localeCompare(a.analyzed_date||''));
+  if(!items.length)return; const g=items[0];
+  const opts=[['confirmada','Confirmada'],['falso_positivo','Falso positivo'],['resolvida_na_fonte','Resolvida'],['dados_insuficientes','Dados insuf.'],['aguardando_revisao','Aguardando']];
+  const cards=items.map(e=>`<div style="border:1px solid var(--linha);border-radius:12px;padding:14px;margin-top:10px" data-card="${e.id}">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b>${dBR(e.analyzed_date)} · ${esc(tl(e.exception_type))}</b><span class="pill ${stC(e.status)} stp">${stl(e.status)}</span></div>
+    <div class="kv"><span>Escala prevista</span><b>${esc(e.schedule_preview)}</b></div>
+    <div class="kv"><span>Batidas registradas</span><b>${esc(e.punches_preview)}</b></div>
+    <div class="expl" style="margin:10px 0">${esc(e.explanation)}</div>
+    <div class="opts">${opts.map(o=>`<button data-k="${o[0]}" class="${e.status===o[0]?'on':''}">${o[1]}</button>`).join('')}</div>
+    <textarea placeholder="Observação (opcional)">${esc(e.operational_note)}</textarea>
+    <div style="margin-top:8px"><button class="btn sv">Salvar este</button></div>
+  </div>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${esc(g.name)}</h3><button class="btn g" id="fx">Fechar</button></div>
+    <p class="muted">${esc(g.plant)} · ${esc(g.dep||g.department)} · ${items.length} apontamento(s)${dy?(' · '+dBR(dy)):''}</p>${cards}</div></div>`);
+  const ov=document.getElementById('ov'); ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();}; document.getElementById('fx').onclick=()=>ov.remove();
+  document.querySelectorAll('#dr [data-card]').forEach(card=>{
+    const e=items.find(x=>String(x.id)===card.dataset.card);
+    card.querySelectorAll('.opts button').forEach(b=>b.onclick=()=>{card.querySelectorAll('.opts button').forEach(x=>x.classList.remove('on'));b.classList.add('on');});
+    card.querySelector('.sv').onclick=async()=>{
+      const sel=card.querySelector('.opts button.on');if(!sel){alert('Escolha uma classificação.');return;}
+      const novo=sel.dataset.k, obs=card.querySelector('textarea').value||null;
+      await sb.from('timekeeping_exceptions').update({status:novo,validated_by:USER.id,validated_at:new Date().toISOString(),operational_note:obs}).eq('id',e.id);
+      await sb.from('exception_status_history').insert({exception_id:e.id,old_status:e.status,new_status:novo,note:obs,changed_by:USER.id});
+      e.status=novo;e.operational_note=obs;
+      const p=card.querySelector('.stp'); p.className='pill '+stC(novo)+' stp'; p.textContent=stl(novo);
+      card.querySelector('.sv').textContent='Salvo ✓';
+    };
+  });
+}
 function fech(){document.getElementById('view').innerHTML=`<h2 class="page">Fechamento mensal</h2><p class="sub">Double Check da competência.</p><section class="block"><p class="muted">O fechamento mensal automático (reprocessa toda a competência e concilia) será ativado após a validação diária do piloto. Por enquanto, a operação é a conferência diária na aba <b>Exceções</b>.</p></section>`;}
 function aud(){document.getElementById('view').innerHTML=`<h2 class="page">Auditoria</h2><p class="sub">Registro de classificações.</p><section class="block"><p class="muted">A trilha de auditoria detalhada aparece aqui conforme o uso (quem classificou o quê). Visível apenas para o owner.</p></section>`;}
 
