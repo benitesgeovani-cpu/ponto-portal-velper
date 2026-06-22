@@ -97,8 +97,10 @@ async function afterLogin(){
 }
 async function loadExceptions(){
   // Filtra pelo mês vigente: só exceções do período atual de conferência.
-  const hoje=new Date(); const anoMes=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
-  const de=`${anoMes}-01`; const ate=`${anoMes}-31`;
+  const hoje=new Date();
+  const de=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().slice(0,10);
+  const ate=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).toISOString().slice(0,10);
+  const anoMes=de.slice(0,7);
   EXC=[]; let from=0; const size=1000;
   for(let i=0;i<10;i++){
     const { data } = await sb.from('timekeeping_exceptions').select('*')
