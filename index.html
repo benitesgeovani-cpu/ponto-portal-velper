@@ -54,6 +54,8 @@
   .expl{background:#f7f9fe;border:1px solid var(--linha);border-radius:10px;padding:12px;font-size:13px;margin:12px 0}
   .opts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0} .opts button{border:1px solid var(--linha);background:#fff;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600} .opts button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
   textarea{width:100%;border:1px solid var(--linha);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;min-height:56px}
+  .bar-click{border-radius:6px;padding:2px 4px;margin:-2px -4px;transition:background .12s} .bar-click:hover{background:#eef2fb} .bar-click:hover b{color:var(--azul)}
+  @media print{aside,#sair,.seal,.topbar,.filters,.btn,.opts,textarea,.note-print{display:none!important} #app{display:block} .content{padding:0} section.block{break-inside:avoid;border:1px solid #ccc;margin-bottom:12px} h2.page{font-size:18px} table{font-size:12px}}
 </style>
 </head>
 <body>
@@ -112,8 +114,9 @@ async function loadExceptions(){
   MES_VIGENTE=anoMes;
 }
 function countBy(arr,key){const o={};for(const a of arr)o[a[key]]=(o[a[key]]||0)+1;return o;}
-function bars(obj){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);const m=Math.max(1,...e.map(x=>x[1]));
-  return `<div class="bars">${e.map(([k,v])=>`<div class="bar"><div class="l">${esc(tl(k))}</div><div class="t"><div class="f" style="width:${v/m*100}%"></div></div><b>${v}</b></div>`).join('')||'<span class="muted">Sem dados</span>'}</div>`;}
+function bars(obj,kind){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);const m=Math.max(1,...e.map(x=>x[1]));
+  if(!e.length)return'<span class="muted">Sem dados</span>';
+  return `<div class="bars">${e.map(([k,v])=>`<div class="bar${kind?' bar-click':''}" ${kind?`data-bk="${kind}" data-bv="${esc(k)}" title="Clique para filtrar"`:''}><div class="l">${esc(tl(k))}</div><div class="t"><div class="f" style="width:${v/m*100}%"></div></div><b>${v}</b></div>`).join('')}</div>`;}
 
 function renderApp(){
   const menu=[['visao','Visão geral'],['exc','Exceções'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
@@ -143,14 +146,15 @@ function visao(){
       ${kpi('Resolvidas',EXC.filter(e=>e.status==='resolvida_na_fonte').length,'ver lista','good','resolvida')}
     </div>
     <div class="row2" style="margin-top:16px">
-      <section class="block"><h3>Por filial</h3>${bars(countBy(EXC,'plant'))}</section>
-      <section class="block"><h3>Por tipo</h3>${bars(countBy(EXC,'exception_type'))}</section>
+      <section class="block"><h3>Por filial <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(EXC,'plant'),'fil')}</section>
+      <section class="block"><h3>Por tipo <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(EXC,'exception_type'),'tip')}</section>
     </div>
     <section class="block"><h3>Mais críticas</h3>
       <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Dia</th><th>Tipo</th><th>Status</th></tr></thead>
       <tbody>${crit.slice(0,8).map(e=>row(e)).join('')}</tbody></table></section>`;
   bindRows(V);
   V.querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>{PRESET=el.dataset.f;TAB='exc';renderApp();});
+  V.querySelectorAll('.bar[data-bk]').forEach(el=>el.onclick=()=>{PRESET={[el.dataset.bk]:el.dataset.bv};TAB='exc';renderApp();});
 }
 function kpi(h,b,s,c='',f=''){return `<div class="card kpi ${c}" ${f?`data-f="${f}" style="cursor:pointer" title="Clique para ver a lista"`:''}><h3>${h}</h3><div class="big">${b}</div><div class="s">${s}</div></div>`;}
 function row(e){return `<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`;}
@@ -196,11 +200,18 @@ function vExc(){
     const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
     const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
   if(PRESET){
-    if(PRESET==='criticas') document.getElementById('fsev').value='alta';
-    else if(PRESET==='abertas') document.getElementById('fst').value='aberta';
-    else if(PRESET==='confirmada') document.getElementById('fst').value='confirmada';
-    else if(PRESET==='falso') document.getElementById('fst').value='falso_positivo';
-    else if(PRESET==='resolvida') document.getElementById('fst').value='resolvida_na_fonte';
+    if(typeof PRESET==='object'){
+      if(PRESET.fil) document.getElementById('ffil').value=PRESET.fil;
+      if(PRESET.tip) document.getElementById('ftip').value=PRESET.tip;
+      if(PRESET.sev) document.getElementById('fsev').value=PRESET.sev;
+      if(PRESET.st)  document.getElementById('fst').value=PRESET.st;
+    } else {
+      if(PRESET==='criticas') document.getElementById('fsev').value='alta';
+      else if(PRESET==='abertas') document.getElementById('fst').value='aberta';
+      else if(PRESET==='confirmada') document.getElementById('fst').value='confirmada';
+      else if(PRESET==='falso') document.getElementById('fst').value='falso_positivo';
+      else if(PRESET==='resolvida') document.getElementById('fst').value='resolvida_na_fonte';
+    }
     PRESET=null;
   }
   draw();
@@ -270,7 +281,82 @@ function openColaborador(empId){
     };
   });
 }
-function fech(){document.getElementById('view').innerHTML=`<h2 class="page">Fechamento mensal</h2><p class="sub">Double Check da competência.</p><section class="block"><p class="muted">O fechamento mensal automático (reprocessa toda a competência e concilia) será ativado após a validação diária do piloto. Por enquanto, a operação é a conferência diária na aba <b>Exceções</b>.</p></section>`;}
+async function fech(){
+  const V=document.getElementById('view');
+  const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
+  V.innerHTML=`<h2 class="page">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
+    <p class="sub">Relatório gerencial da competência.</p>
+    <section class="block"><p class="muted" style="text-align:center;padding:20px">Carregando dados...</p></section>`;
+
+  const hoje=new Date();
+  const de=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().slice(0,10);
+  const ate=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).toISOString().slice(0,10);
+
+  const TIPOS_HE=['jornada_acima','possivel_hora_extra','possivel_extrapolacao_jornada'];
+  const TIPOS_JB=['jornada_abaixo'];
+
+  let MGMT=[]; let from=0;
+  for(let i=0;i<10;i++){
+    const {data}=await sb.from('timekeeping_exceptions')
+      .select('solides_internal_id,display_name,plant,exception_type,evidence_minutes,analyzed_date,operational_note')
+      .eq('status','ignorada_por_regra')
+      .in('exception_type',[...TIPOS_HE,...TIPOS_JB])
+      .gte('analyzed_date',de).lte('analyzed_date',ate)
+      .range(from,from+999);
+    if(!data||!data.length)break; MGMT.push(...data); if(data.length<1000)break; from+=1000;
+  }
+
+  const hhmm=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
+
+  const aggr=(tipos)=>{const map=new Map();
+    for(const e of MGMT){if(!tipos.includes(e.exception_type))continue;
+      const k=e.solides_internal_id;
+      if(!map.has(k))map.set(k,{sid:k,name:e.display_name,plant:e.plant,dias:new Set(),min:0});
+      const a=map.get(k);a.dias.add(e.analyzed_date);a.min+=(e.evidence_minutes||0);
+    }
+    return[...map.values()].map(r=>({...r,dias:r.dias.size})).sort((a,b)=>b.min-a.min);
+  };
+
+  const heRows=aggr(TIPOS_HE);
+  const jbRows=aggr(TIPOS_JB);
+
+  // HE sem justificativa = colaboradores com hora extra E com erros reais ainda abertos na fila da Andreia
+  const empComErroAberto=new Set(EXC.filter(e=>['aberta','confirmada'].includes(e.status)).map(e=>String(e.solides_internal_id)));
+  const sjRows=heRows.filter(r=>empComErroAberto.has(String(r.sid)));
+
+  const mkTbl=(rows,cols,rowFn)=>`<div style="overflow-x:auto"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+    <tbody>${rows.length?rows.map(rowFn).join(''):`<tr><td colspan="${cols.length}" style="text-align:center;padding:20px" class="muted">Nenhum registro este mês</td></tr>`}</tbody></table></div>`;
+
+  const badge=(n,c)=>`<span class="pill ${c}" style="font-size:12px;margin-left:8px">${n} colaborador${n!==1?'es':''}</span>`;
+
+  V.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+      <h2 class="page" style="margin:0">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
+      <button class="btn" onclick="window.print()">Imprimir relatório</button>
+    </div>
+    <p class="sub">Relatório gerencial · não inclui correções de ponto pendentes (ver aba Exceções).</p>
+
+    <section class="block">
+      <h3>Horas extras ${badge(heRows.length,'c-yel')}</h3>
+      <p class="note">Colaboradores que excederam a jornada contratada em pelo menos um dia. O sistema de ponto calcula normalmente — exibido aqui para ciência gerencial.</p>
+      ${mkTbl(heRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+    </section>
+
+    <section class="block">
+      <h3>Abaixo da carga horária ${badge(jbRows.length,'c-red')}</h3>
+      <p class="note">Colaboradores com jornada inferior ao contratado em algum dia. O ponto calcula com o que foi registrado.</p>
+      ${mkTbl(jbRows,['Colaborador','Filial','Dias','Déficit estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+    </section>
+
+    <section class="block">
+      <h3>Horas extras sem justificativa ${badge(sjRows.length,'c-red')}</h3>
+      <p class="note">Colaboradores com horas extras <b>e</b> erros de batida em aberto na fila do DP. A hora extra pode ser consequência de marcação irregular (ex.: esqueceu de bater a saída). Requer análise antes do fechamento.</p>
+      ${mkTbl(sjRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+    </section>`;
+}
 function aud(){document.getElementById('view').innerHTML=`<h2 class="page">Auditoria</h2><p class="sub">Registro de classificações.</p><section class="block"><p class="muted">A trilha de auditoria detalhada aparece aqui conforme o uso (quem classificou o quê). Visível apenas para o owner.</p></section>`;}
 
 boot();
