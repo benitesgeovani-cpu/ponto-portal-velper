@@ -73,7 +73,7 @@ const sevC = s => (s==='critica'||s==='alta')?'c-red':s==='media'?'c-yel':s==='b
 const stC = s => ({aberta:'c-blue',aguardando_revisao:'c-yel',confirmada:'c-red',falso_positivo:'c-gry',resolvida_na_fonte:'c-grn',dados_insuficientes:'c-gry',necessita_revisao_regra:'c-gry'})[s]||'c-gry';
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao';
+let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null;
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -123,14 +123,14 @@ function effStatusList(){return EXC;}
 function visao(){
   const V=document.getElementById('view'); const open=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
   const crit=EXC.filter(e=>['critica','alta'].includes(e.severity));
-  V.innerHTML=`<h2 class="page">Visão geral</h2><p class="sub">Todas as divergências de ponto identificadas pelo robô.</p>
+  V.innerHTML=`<h2 class="page">Visão geral</h2><p class="sub">Resumo de todas as divergências. <b>Clique em um número</b> para ver a lista correspondente.</p>
     <div class="grid">
-      ${kpi('Total de divergências',EXC.length,'no período')}
-      ${kpi('Abertas / a tratar',open.length,'aguardando','')}
-      ${kpi('Críticas (alta)',crit.length,'prioridade','alert')}
-      ${kpi('Confirmadas',EXC.filter(e=>e.status==='confirmada').length,'pendência real','warn')}
-      ${kpi('Falsos positivos',EXC.filter(e=>e.status==='falso_positivo').length,'ajuste de regra','')}
-      ${kpi('Resolvidas',EXC.filter(e=>e.status==='resolvida_na_fonte').length,'na Sólides','good')}
+      ${kpi('Total de divergências',EXC.length,'ver todas','','all')}
+      ${kpi('Abertas / a tratar',open.length,'ver lista','','abertas')}
+      ${kpi('Críticas (alta)',crit.length,'ver lista','alert','criticas')}
+      ${kpi('Confirmadas',EXC.filter(e=>e.status==='confirmada').length,'ver lista','warn','confirmada')}
+      ${kpi('Falsos positivos',EXC.filter(e=>e.status==='falso_positivo').length,'ver lista','','falso')}
+      ${kpi('Resolvidas',EXC.filter(e=>e.status==='resolvida_na_fonte').length,'ver lista','good','resolvida')}
     </div>
     <div class="row2" style="margin-top:16px">
       <section class="block"><h3>Por filial</h3>${bars(countBy(EXC,'plant'))}</section>
@@ -140,8 +140,9 @@ function visao(){
       <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Dia</th><th>Tipo</th><th>Status</th></tr></thead>
       <tbody>${crit.slice(0,8).map(e=>row(e)).join('')}</tbody></table></section>`;
   bindRows(V);
+  V.querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>{PRESET=el.dataset.f;TAB='exc';renderApp();});
 }
-function kpi(h,b,s,c=''){return `<div class="card kpi ${c}"><h3>${h}</h3><div class="big">${b}</div><div class="s">${s}</div></div>`;}
+function kpi(h,b,s,c='',f=''){return `<div class="card kpi ${c}" ${f?`data-f="${f}" style="cursor:pointer" title="Clique para ver a lista"`:''}><h3>${h}</h3><div class="big">${b}</div><div class="s">${s}</div></div>`;}
 function row(e){return `<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`;}
 function bindRows(scope){scope.querySelectorAll('tr[data-id]').forEach(tr=>tr.onclick=()=>openDrawer(tr.dataset.id));}
 
@@ -174,6 +175,14 @@ function vExc(){
   document.getElementById('csv').onclick=()=>{const h=['data','colaborador','filial','setor','tipo','gravidade','status','explicacao'];
     const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
     const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
+  if(PRESET){
+    if(PRESET==='criticas') document.getElementById('fsev').value='alta';
+    else if(PRESET==='abertas') document.getElementById('fst').value='aberta';
+    else if(PRESET==='confirmada') document.getElementById('fst').value='confirmada';
+    else if(PRESET==='falso') document.getElementById('fst').value='falso_positivo';
+    else if(PRESET==='resolvida') document.getElementById('fst').value='resolvida_na_fonte';
+    PRESET=null;
+  }
   draw();
 }
 function val(id){const e=document.getElementById(id);return e?e.value:'';}
