@@ -57,6 +57,9 @@
   .bar-click{border-radius:6px;padding:2px 4px;margin:-2px -4px;transition:background .12s} .bar-click:hover{background:#eef2fb} .bar-click:hover b{color:var(--azul)}
   @media print{aside,#sair,.seal,.topbar,.filters,.btn,.opts,textarea,.note-print{display:none!important} #app{display:block} .content{padding:0} section.block{break-inside:avoid;border:1px solid #ccc;margin-bottom:12px} h2.page{font-size:18px} table{font-size:12px}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -76,6 +79,8 @@ const stC = s => ({aberta:'c-blue',aguardando_revisao:'c-yel',confirmada:'c-red'
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null, MES_VIGENTE='';
+const hmmfmt=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
+let RELATORIO=null;
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -306,8 +311,6 @@ async function fech(){
     if(!data||!data.length)break; MGMT.push(...data); if(data.length<1000)break; from+=1000;
   }
 
-  const hhmm=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
-
   const aggr=(tipos)=>{const map=new Map();
     for(const e of MGMT){if(!tipos.includes(e.exception_type))continue;
       const k=e.solides_internal_id;
@@ -323,6 +326,7 @@ async function fech(){
   // HE sem justificativa = colaboradores com hora extra E com erros reais ainda abertos na fila da Andreia
   const empComErroAberto=new Set(EXC.filter(e=>['aberta','confirmada'].includes(e.status)).map(e=>String(e.solides_internal_id)));
   const sjRows=heRows.filter(r=>empComErroAberto.has(String(r.sid)));
+  RELATORIO={heRows,jbRows,sjRows,mesLabel,mes:MES_VIGENTE};
 
   const mkTbl=(rows,cols,rowFn)=>`<div style="overflow-x:auto"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
     <tbody>${rows.length?rows.map(rowFn).join(''):`<tr><td colspan="${cols.length}" style="text-align:center;padding:20px" class="muted">Nenhum registro este mês</td></tr>`}</tbody></table></div>`;
@@ -332,7 +336,10 @@ async function fech(){
   V.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
       <h2 class="page" style="margin:0">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
-      <button class="btn" onclick="window.print()">Imprimir relatório</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="btn-pdf">⬇ PDF</button>
+        <button class="btn g" id="btn-xls">⬇ Excel</button>
+      </div>
     </div>
     <p class="sub">Relatório gerencial · não inclui correções de ponto pendentes (ver aba Exceções).</p>
 
@@ -340,23 +347,69 @@ async function fech(){
       <h3>Horas extras ${badge(heRows.length,'c-yel')}</h3>
       <p class="note">Colaboradores que excederam a jornada contratada em pelo menos um dia. O sistema de ponto calcula normalmente — exibido aqui para ciência gerencial.</p>
       ${mkTbl(heRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>
 
     <section class="block">
       <h3>Abaixo da carga horária ${badge(jbRows.length,'c-red')}</h3>
       <p class="note">Colaboradores com jornada inferior ao contratado em algum dia. O ponto calcula com o que foi registrado.</p>
       ${mkTbl(jbRows,['Colaborador','Filial','Dias','Déficit estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>
 
     <section class="block">
       <h3>Horas extras sem justificativa ${badge(sjRows.length,'c-red')}</h3>
       <p class="note">Colaboradores com horas extras <b>e</b> erros de batida em aberto na fila do DP. A hora extra pode ser consequência de marcação irregular (ex.: esqueceu de bater a saída). Requer análise antes do fechamento.</p>
       ${mkTbl(sjRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hhmm(r.min)}</b></td></tr>`)}
+        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
     </section>`;
+  document.getElementById('btn-pdf').onclick=gerarPDF;
+  document.getElementById('btn-xls').onclick=gerarExcel;
 }
+
+function gerarPDF(){
+  if(!RELATORIO)return;
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const {heRows,jbRows,sjRows,mesLabel,mes}=RELATORIO;
+  const ts=s=>s?(s+'').normalize('NFD').replace(/[̀-ͯ]/g,''):s;
+  doc.setFontSize(16);doc.setFont('helvetica','bold');
+  doc.text('Relatorio Gerencial - Fechamento',14,18);
+  doc.setFontSize(11);doc.setFont('helvetica','normal');
+  doc.text(ts(mesLabel)+' · Grupo Velper',14,25);
+  doc.text('Gerado em: '+new Date().toLocaleDateString('pt-BR'),14,31);
+  doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('1. Horas Extras ('+heRows.length+' colaboradores)',14,42);
+  doc.autoTable({startY:46,head:[['Colaborador','Filial','Dias','Total']],
+    body:heRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[29,78,216]},margin:{left:14,right:14}});
+  let y=doc.lastAutoTable.finalY+10;
+  doc.setFont('helvetica','bold');doc.text('2. Abaixo da Carga Horaria ('+jbRows.length+' colaboradores)',14,y);
+  doc.autoTable({startY:y+4,head:[['Colaborador','Filial','Dias','Deficit']],
+    body:jbRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[220,38,38]},margin:{left:14,right:14}});
+  y=doc.lastAutoTable.finalY+10;
+  doc.setFont('helvetica','bold');doc.text('3. HE sem Justificativa ('+sjRows.length+' colaboradores)',14,y);
+  doc.autoTable({startY:y+4,head:[['Colaborador','Filial','Dias','Total']],
+    body:sjRows.map(r=>[ts(r.name),ts(r.plant),r.dias,hmmfmt(r.min)]),
+    styles:{fontSize:9,cellPadding:2.5},headStyles:{fillColor:[217,119,6]},margin:{left:14,right:14}});
+  doc.save('relatorio-gerencial-'+(mes||'competencia')+'.pdf');
+}
+
+function gerarExcel(){
+  if(!RELATORIO)return;
+  const {heRows,jbRows,sjRows,mes}=RELATORIO;
+  const XL=window.XLSX;
+  const wb=XL.utils.book_new();
+  const mkWs=(rows,cols,fn)=>XL.utils.aoa_to_sheet([cols,...rows.map(fn)]);
+  XL.utils.book_append_sheet(wb,mkWs(heRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
+    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'Horas Extras');
+  XL.utils.book_append_sheet(wb,mkWs(jbRows,['Colaborador','Filial','Dias','Deficit estimado'],
+    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'Abaixo da Carga');
+  XL.utils.book_append_sheet(wb,mkWs(sjRows,['Colaborador','Filial','Dias c/ HE','Total estimado'],
+    r=>[r.name,r.plant,r.dias,hmmfmt(r.min)]),'HE sem Justificativa');
+  XL.writeFile(wb,'relatorio-gerencial-'+(mes||'competencia')+'.xlsx');
+}
+
 function aud(){document.getElementById('view').innerHTML=`<h2 class="page">Auditoria</h2><p class="sub">Registro de classificações.</p><section class="block"><p class="muted">A trilha de auditoria detalhada aparece aqui conforme o uso (quem classificou o quê). Visível apenas para o owner.</p></section>`;}
 
 boot();
