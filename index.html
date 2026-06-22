@@ -98,7 +98,7 @@ async function afterLogin(){
 async function loadExceptions(){
   EXC=[]; let from=0; const size=1000;
   for(let i=0;i<10;i++){
-    const { data } = await sb.from('timekeeping_exceptions').select('*').order('analyzed_date',{ascending:false}).range(from,from+size-1);
+    const { data } = await sb.from('timekeeping_exceptions').select('*').neq('status','ignorada_por_regra').order('analyzed_date',{ascending:false}).range(from,from+size-1);
     if(!data||!data.length)break; EXC.push(...data); if(data.length<size)break; from+=size;
   }
 }
