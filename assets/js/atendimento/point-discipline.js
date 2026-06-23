@@ -149,7 +149,7 @@ function exceptionRow(r) {
   const days = calDays(r.available_for_treatment_at || r.created_at);
   return `
     <tr>
-      <td>${esc(r.employee_name || r.solides_internal_id || '—')}</td>
+      <td>${esc(r.display_name || r.solides_internal_id || '—')}</td>
       <td>${esc(EXCEPTION_LABELS[r.exception_type] || r.exception_type)}</td>
       <td><span class="pill ${SEV_CLASS[sev] || 'c-gry'}">${esc(sev)}</span></td>
       <td class="muted">${fmtDate(r.work_date || r.analyzed_date)}</td>

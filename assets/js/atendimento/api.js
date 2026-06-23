@@ -108,7 +108,7 @@ export async function listOpenExceptions({ page = 0, pageSize = 50 } = {}) {
   return sb.from('timekeeping_exceptions')
     .select(`
       id, exception_type, severity, status, operational_status,
-      solides_internal_id, employee_name, analyzed_date, work_date,
+      solides_internal_id, display_name, analyzed_date, work_date,
       available_for_treatment_at, due_for_first_treatment_at,
       sla_first_treatment_status, sla_closure_status,
       total_open_calendar_days, current_owner_team, plant,
