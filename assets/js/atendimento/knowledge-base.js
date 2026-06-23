@@ -48,7 +48,7 @@ async function loadArticles() {
   list.innerHTML = '<div class="spinner"></div> Carregando…';
 
   const cat    = document.getElementById('kb-cat')?.value || '';
-  const status = document.getElementById('kb-status')?.value || 'approved';
+  const status = document.getElementById('kb-status')?.value ?? 'approved';
 
   const { data, error } = await listArticles({
     status: status || undefined,
