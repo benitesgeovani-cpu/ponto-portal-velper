@@ -164,15 +164,13 @@ function effStatusList(){return EXC;}
 
 function visao(){
   const V=document.getElementById('view');
-  const aTratar=EXC.filter(e=>['aberta','aguardando_revisao'].includes(e.status));
-  const confirmadas=EXC.filter(e=>e.status==='confirmada');
+  const aTratar=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
   const corrigidas=EXC.filter(e=>['falso_positivo','resolvida_na_fonte'].includes(e.status));
-  const abertosBASE=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
+  const abertosBASE=aTratar;
   const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
   V.innerHTML=`<h2 class="page">Visão geral <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2><p class="sub">Divergências do mês vigente. <b>Clique em um número</b> para ver a fila correspondente.</p>
     <div class="grid">
       ${kpi('A tratar',aTratar.length,'ver fila','alert','aTratar')}
-      ${kpi('Confirmadas',confirmadas.length,'ver fila','warn','confirmadas')}
       ${kpi('Corrigidas',corrigidas.length,'ver fila','good','corrigidas')}
       ${kpi('Total do mês',EXC.length,'ver tudo','','all')}
     </div>
