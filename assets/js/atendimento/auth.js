@@ -132,7 +132,7 @@ function renderShell() {
           <div class="sep"></div>
           <a href="#requests"   data-tab="requests">Solicitações</a>
           <a href="#laboratory" data-tab="laboratory">Laboratório</a>
-          <a href="#discipline" data-tab="discipline">Disciplina do Ponto</a>
+          <a href="#discipline" data-tab="discipline">Exceções de Ponto</a>
           ${FLAGS.knowledgeBase ? '<a href="#kb" data-tab="kb">Base de Conhecimento</a>' : ''}
         </nav>
       </aside>

@@ -1,7 +1,7 @@
 // point-discipline.js — Disciplina de Tratativa do Ponto (SLA B)
 // Ajuste 5 (aprovado): fila "hoje", aging básico, KPIs mínimos
 import { listOpenExceptions } from './api.js';
-import { fmtDate, fmtDT, slaHtml, timeAgo, calcSlaStatus } from './sla.js';
+import { fmtDate } from './sla.js';
 import { esc } from './auth.js';
 
 const EXCEPTION_LABELS = {
@@ -26,8 +26,8 @@ const SEV_CLASS = {
 
 export async function renderPointDiscipline(container, _state) {
   container.innerHTML = `
-    <h2 class="page">Disciplina de Tratativa do Ponto</h2>
-    <p class="sub">Fila de exceções abertas e métricas de tratativa (SLA B)</p>
+    <h2 class="page">Exceções de Ponto</h2>
+    <p class="sub">Fila de exceções abertas para tratativa interna da DP</p>
     <div id="pd-body"><div class="spinner"></div> Carregando…</div>`;
 
   const { data, error, count } = await listOpenExceptions({ pageSize: 200 });
@@ -48,7 +48,6 @@ export async function renderPointDiscipline(container, _state) {
   const hoje     = rows.filter(r => (r.work_date || r.analyzed_date || '') === todayStr).length;
   const old3     = rows.filter(r => calDays(r.available_for_treatment_at || r.created_at) >= 3).length;
   const old7     = rows.filter(r => calDays(r.available_for_treatment_at || r.created_at) >= 7).length;
-  const overdue  = rows.filter(r => calcSlaStatus(r.due_for_first_treatment_at) === 'OVERDUE').length;
 
   // Tipo mais frequente
   const typeCount = {};
@@ -79,7 +78,6 @@ export async function renderPointDiscipline(container, _state) {
       ${kpiCard('Total aberto', total, total > 20 ? 'alert' : total > 10 ? 'warn' : 'good', 'exceções em aberto')}
       ${kpiCard('Críticas / Altas', criticas, criticas > 0 ? 'alert' : 'good', 'prioridade máxima')}
       ${kpiCard('De hoje', hoje, '', 'criadas ou ocorridas hoje')}
-      ${kpiCard('SLA vencido', overdue, overdue > 0 ? 'alert' : 'good', 'ultrapassaram deadline')}
       ${kpiCard('Backlog ≥ 3d', old3, old3 > 5 ? 'warn' : 'good', 'dias sem tratativa')}
       ${kpiCard('Backlog ≥ 7d', old7, old7 > 0 ? 'alert' : 'good', 'crítico — > 1 semana')}
       ${topType ? kpiCard('Tipo mais comum', topType[1], 'good', EXCEPTION_LABELS[topType[0]] || topType[0]) : ''}
@@ -92,7 +90,7 @@ export async function renderPointDiscipline(container, _state) {
         ? `<table>
             <thead><tr>
               <th>Colaborador</th><th>Tipo</th><th>Severidade</th>
-              <th>Data ocorrência</th><th>SLA</th><th>Aberta há</th>
+              <th>Data ocorrência</th><th>Aberta há</th>
             </tr></thead>
             <tbody>
               ${queueToday.map(r => exceptionRow(r)).join('')}
@@ -126,7 +124,7 @@ export async function renderPointDiscipline(container, _state) {
           <table id="exc-table">
             <thead><tr>
               <th>Colaborador</th><th>Tipo</th><th>Sev.</th>
-              <th>Ocorrência</th><th>SLA</th><th>Em aberto</th>
+              <th>Ocorrência</th><th>Em aberto</th>
             </tr></thead>
             <tbody id="exc-body">
               ${rows.map(r => exceptionRow(r)).join('')}
@@ -144,8 +142,7 @@ export async function renderPointDiscipline(container, _state) {
 }
 
 function exceptionRow(r) {
-  const sev = r.severity || 'baixa';
-  const slaStatus = calcSlaStatus(r.due_for_first_treatment_at);
+  const sev  = r.severity || 'baixa';
   const days = calDays(r.available_for_treatment_at || r.created_at);
   return `
     <tr>
@@ -153,7 +150,6 @@ function exceptionRow(r) {
       <td>${esc(EXCEPTION_LABELS[r.exception_type] || r.exception_type)}</td>
       <td><span class="pill ${SEV_CLASS[sev] || 'c-gry'}">${esc(sev)}</span></td>
       <td class="muted">${fmtDate(r.work_date || r.analyzed_date)}</td>
-      <td>${slaHtml(slaStatus)}</td>
       <td class="muted">${days}d</td>
     </tr>`;
 }
