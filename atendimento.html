@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atendimento DP — Velper</title>
+<link rel="stylesheet" href="./assets/css/atendimento.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<!--
+  Feature flags — Ajuste 10 (aprovado): env vars apenas, sem tabela feature_flags.
+  Altere os valores abaixo para habilitar/desabilitar funcionalidades no deploy.
+  NUNCA ative WHATSAPP_PRODUCTION_ENABLED sem homologação completa.
+-->
+<script>
+window.ATENDIMENTO_CONFIG = {
+  SUPABASE_URL:     'https://zpweiqjgmtggglfrzixu.supabase.co',
+  SUPABASE_ANON_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwd2VpcWpnbXRnZ2dsZnJ6aXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTcwNTQsImV4cCI6MjA5NzYzMzA1NH0.4H0FP1ZB9VxEZXzxBMuUIAibW3hK5WSu61U60Nnk79M',
+
+  /* ── Flags de feature ── */
+  SERVICE_DESK_ENABLED:          true,   // master switch do módulo
+  WHATSAPP_TEST_ENABLED:         false,  // piloto WhatsApp (homologação)
+  WHATSAPP_PRODUCTION_ENABLED:   false,  // WhatsApp produção — NÃO ativar sem aprovação
+  KNOWLEDGE_BASE_ENABLED:        true,   // Base de Conhecimento
+  AUTO_REPLY_ENABLED:            false,  // respostas automáticas ao colaborador
+  PILOT_SILENT_MODE:             true,   // não envia notificações externas (piloto silencioso)
+};
+</script>
+
+<!--
+  Ajuste 11 (aprovado): navegação de volta ao Ponto Inteligente via sidebar.
+  Ajuste 2 (aprovado): estrutura modular — cada .js tem responsabilidade única.
+  auth.js é o entry point e importa os demais módulos.
+-->
+<script type="module" src="./assets/js/atendimento/auth.js"></script>
+</body>
+</html>
