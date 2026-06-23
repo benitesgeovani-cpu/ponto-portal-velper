@@ -222,17 +222,17 @@ function renderActions(r) {
     const { cls, label } = srStatusBadge(s);
     return `<button class="btn sm g action-btn" data-status="${s}" data-id="${r.id}">${label}</button>`;
   }).join('');
-  return `<div style="margin:14px 0"><div class="opts">${btns}</div></div>`;
+  return `<div style="margin:14px 0"><div class="opts">${btns}</div><div class="erro" id="action-err"></div></div>`;
 }
 
 function nextStatuses(current) {
   const map = {
-    RECEIVED:           ['TRIAGED','WAITING_DP','IN_PROGRESS','CANCELED'],
+    RECEIVED:           ['TRIAGED','WAITING_DP','CANCELED'],
     AUTO_HANDLING:      ['TRIAGED','WAITING_DP'],
     WAITING_EMPLOYEE:   ['IN_PROGRESS','CANCELED'],
     TRIAGED:            ['WAITING_DP','IN_PROGRESS','CANCELED'],
     WAITING_DP:         ['IN_PROGRESS','WAITING_EMPLOYEE','WAITING_APPROVAL','CANCELED'],
-    WAITING_OTHER_TEAM: ['IN_PROGRESS','WAITING_DP'],
+    WAITING_OTHER_TEAM: ['IN_PROGRESS','WAITING_DP','CANCELED'],
     IN_PROGRESS:        ['RESOLVED_MANUALLY','WAITING_EMPLOYEE','WAITING_APPROVAL','CANCELED'],
     WAITING_APPROVAL:   ['IN_PROGRESS','RESOLVED_MANUALLY','CANCELED'],
     RESOLVED_MANUALLY:  ['CLOSED'],
@@ -247,7 +247,12 @@ function bindStatusActions(reqId, ov) {
     btn.onclick = async () => {
       btn.disabled = true;
       try { await changeStatus(reqId, btn.dataset.status); }
-      catch(e) { alert('Erro: ' + e.message); btn.disabled = false; return; }
+      catch(e) {
+        const errEl = document.getElementById('action-err');
+        if (errEl) errEl.textContent = 'Erro: ' + e.message;
+        btn.disabled = false;
+        return;
+      }
       ov.remove();
       openDrawer(reqId);
       loadTable();
