@@ -83,8 +83,33 @@ const hmmfmt=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);con
 let RELATORIO=null;
 
 async function boot(){
+  // Detecta link de recuperação de senha (?type=recovery no hash ou query)
+  const hash = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+  const query = Object.fromEntries(new URLSearchParams(location.search.slice(1)));
+  if((hash.type||query.type)==='recovery'){
+    // O Supabase já estabelece a sessão via URL — aguarda e mostra form de nova senha
+    await new Promise(r=>setTimeout(r,800));
+    const { data:{ session } } = await sb.auth.getSession();
+    if(session){ USER=session.user; return renderNovaSenha(); }
+  }
   const { data:{ session } } = await sb.auth.getSession();
   if(session){ USER=session.user; await afterLogin(); } else renderLogin();
+}
+function renderNovaSenha(msg){
+  ROOT.innerHTML=`<div class="login"><h2>Redefinir senha</h2>
+    <p>Digite sua nova senha para acessar o painel.</p>
+    <label>Nova senha</label><input id="p1" type="password" placeholder="Mínimo 6 caracteres"/>
+    <label>Confirmar senha</label><input id="p2" type="password" placeholder="Repita a senha"/>
+    <button id="b">Salvar nova senha</button><div class="erro">${msg||''}</div></div>`;
+  document.getElementById('b').onclick=async()=>{
+    const p1=document.getElementById('p1').value, p2=document.getElementById('p2').value;
+    if(p1.length<6)return renderNovaSenha('Senha muito curta (mínimo 6 caracteres).');
+    if(p1!==p2)return renderNovaSenha('As senhas não coincidem.');
+    const{error}=await sb.auth.updateUser({password:p1});
+    if(error)return renderNovaSenha('Erro: '+error.message);
+    history.replaceState(null,'',location.pathname);
+    await afterLogin();
+  };
 }
 function renderLogin(msg){
   ROOT.innerHTML = `<div class="login"><h2>Ponto Inteligente DP</h2>
