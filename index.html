@@ -124,51 +124,73 @@ function bars(obj,kind){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);c
   return `<div class="bars">${e.map(([k,v])=>`<div class="bar${kind?' bar-click':''}" ${kind?`data-bk="${kind}" data-bv="${esc(k)}" title="Clique para filtrar"`:''}><div class="l">${esc(tl(k))}</div><div class="t"><div class="f" style="width:${v/m*100}%"></div></div><b>${v}</b></div>`).join('')}</div>`;}
 
 function renderApp(){
-  const menu=[['visao','Visão geral'],['exc','Exceções'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
+  const menu=[['visao','Visão geral'],['abertos','Em aberto'],['corrigidos','Corrigidos'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
   ROOT.innerHTML=`<div id="app">
     <aside><div class="brand">Ponto Inteligente DP<small>Grupo Velper · DP</small></div>
       <nav>${menu.map(m=>`<a data-k="${m[0]}" class="${m[0]===TAB?'on':''}">${m[1]}</a>`).join('')}</nav></aside>
     <main><div class="topbar"><span class="seal">Modo piloto — somente leitura na Sólides</span>
       <div class="u">Conectado: <b>${esc(USER.email)}</b> (${ROLE})<span class="sair" id="sair">Sair</span></div></div>
       <div class="content" id="view"></div></main></div>`;
-  document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{TAB=a.dataset.k;renderApp();});
+  document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{TAB=a.dataset.k;PRESET=null;renderApp();});
   document.getElementById('sair').onclick=async()=>{await sb.auth.signOut();location.reload();};
-  ({visao,exc:vExc,fech,aud}[TAB]||visao)();
+  ({visao,abertos:()=>vExc('abertos'),corrigidos:()=>vExc('corrigidos'),fech,aud}[TAB]||visao)();
 }
 function effStatusList(){return EXC;}
 
 function visao(){
-  const V=document.getElementById('view'); const open=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
-  const crit=EXC.filter(e=>['critica','alta'].includes(e.severity));
+  const V=document.getElementById('view');
+  const aTratar=EXC.filter(e=>['aberta','aguardando_revisao'].includes(e.status));
+  const confirmadas=EXC.filter(e=>e.status==='confirmada');
+  const corrigidas=EXC.filter(e=>['falso_positivo','resolvida_na_fonte'].includes(e.status));
+  const abertosBASE=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status));
   const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
-  V.innerHTML=`<h2 class="page">Visão geral <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2><p class="sub">Divergências do mês vigente. <b>Clique em um número</b> para ver a lista correspondente.</p>
+  V.innerHTML=`<h2 class="page">Visão geral <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2><p class="sub">Divergências do mês vigente. <b>Clique em um número</b> para ver a fila correspondente.</p>
     <div class="grid">
-      ${kpi('Total de divergências',EXC.length,'ver todas','','all')}
-      ${kpi('Abertas / a tratar',open.length,'ver lista','','abertas')}
-      ${kpi('Críticas (alta)',crit.length,'ver lista','alert','criticas')}
-      ${kpi('Confirmadas',EXC.filter(e=>e.status==='confirmada').length,'ver lista','warn','confirmada')}
-      ${kpi('Falsos positivos',EXC.filter(e=>e.status==='falso_positivo').length,'ver lista','','falso')}
-      ${kpi('Resolvidas',EXC.filter(e=>e.status==='resolvida_na_fonte').length,'ver lista','good','resolvida')}
+      ${kpi('A tratar',aTratar.length,'ver fila','alert','aTratar')}
+      ${kpi('Confirmadas',confirmadas.length,'ver fila','warn','confirmadas')}
+      ${kpi('Corrigidas',corrigidas.length,'ver fila','good','corrigidas')}
+      ${kpi('Total do mês',EXC.length,'ver tudo','','all')}
     </div>
     <div class="row2" style="margin-top:16px">
-      <section class="block"><h3>Por filial <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(EXC,'plant'),'fil')}</section>
-      <section class="block"><h3>Por tipo <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(EXC,'exception_type'),'tip')}</section>
+      <section class="block"><h3>Em aberto por filial <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(abertosBASE,'plant'),'fil')}</section>
+      <section class="block"><h3>Em aberto por tipo <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(abertosBASE,'exception_type'),'tip')}</section>
     </div>
-    <section class="block"><h3>Mais críticas</h3>
+    <section class="block"><h3>Mais urgentes</h3>
       <table><thead><tr><th>Colaborador</th><th>Filial</th><th>Dia</th><th>Tipo</th><th>Status</th></tr></thead>
-      <tbody>${crit.slice(0,8).map(e=>row(e)).join('')}</tbody></table></section>`;
+      <tbody>${abertosBASE.slice(0,8).map(e=>row(e)).join('')}</tbody></table></section>`;
   bindRows(V);
-  V.querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>{PRESET=el.dataset.f;TAB='exc';renderApp();});
-  V.querySelectorAll('.bar[data-bk]').forEach(el=>el.onclick=()=>{PRESET={[el.dataset.bk]:el.dataset.bv};TAB='exc';renderApp();});
+  V.querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>{
+    const f=el.dataset.f;
+    if(f==='aTratar'){TAB='abertos';PRESET='aTratar';renderApp();}
+    else if(f==='confirmadas'){TAB='abertos';PRESET='confirmada';renderApp();}
+    else if(f==='corrigidas'){TAB='corrigidos';PRESET=null;renderApp();}
+    else{TAB='abertos';PRESET=null;renderApp();}
+  });
+  V.querySelectorAll('.bar[data-bk]').forEach(el=>el.onclick=()=>{PRESET={[el.dataset.bk]:el.dataset.bv};TAB='abertos';renderApp();});
 }
 function kpi(h,b,s,c='',f=''){return `<div class="card kpi ${c}" ${f?`data-f="${f}" style="cursor:pointer" title="Clique para ver a lista"`:''}><h3>${h}</h3><div class="big">${b}</div><div class="s">${s}</div></div>`;}
 function row(e){return `<tr data-id="${e.id}"><td>${esc(e.display_name)}</td><td>${esc(e.plant)}</td><td>${dBR(e.analyzed_date)}</td><td>${esc(tl(e.exception_type))}</td><td><span class="pill ${stC(e.status)}">${stl(e.status)}</span></td></tr>`;}
 function bindRows(scope){scope.querySelectorAll('tr[data-id]').forEach(tr=>tr.onclick=()=>openDrawer(tr.dataset.id));}
 
-function vExc(){
+function vExc(mode='abertos'){
+  const isOpen=mode==='abertos';
+  const BASE=EXC.filter(e=>isOpen
+    ?['aberta','aguardando_revisao','confirmada'].includes(e.status)
+    :['falso_positivo','resolvida_na_fonte'].includes(e.status));
+  const titulo=isOpen?'Em aberto':'Corrigidos';
+  const subtitulo=isOpen
+    ?'Exceções que precisam de tratamento. Abra um colaborador para classificar todos os apontamentos de uma vez.'
+    :'Exceções já tratadas. Clique para consultar ou reclassificar se necessário.';
+  const stOpts=isOpen
+    ?{aberta:'Aberta',aguardando_revisao:'Aguardando',confirmada:'Confirmada'}
+    :{falso_positivo:'Falso positivo',resolvida_na_fonte:'Resolvida na Sólides'};
   const V=document.getElementById('view');
-  const filiais=[...new Set(EXC.map(e=>e.plant))].sort(), empresas=[...new Set(EXC.map(e=>e.company).filter(Boolean))].sort(), setores=[...new Set(EXC.map(e=>e.department))].sort(), tipos=[...new Set(EXC.map(e=>e.exception_type))].sort(), dias=[...new Set(EXC.map(e=>e.analyzed_date))].sort().reverse();
-  V.innerHTML=`<h2 class="page">Exceções</h2><p class="sub">Agrupado por colaborador — abra um colaborador e classifique todos os apontamentos dele de uma vez. Use os filtros (dia, filial, tipo…) para escolher a forma mais prática.</p>
+  const filiais=[...new Set(BASE.map(e=>e.plant))].sort();
+  const empresas=[...new Set(BASE.map(e=>e.company).filter(Boolean))].sort();
+  const setores=[...new Set(BASE.map(e=>e.department))].sort();
+  const tipos=[...new Set(BASE.map(e=>e.exception_type))].sort();
+  const dias=[...new Set(BASE.map(e=>e.analyzed_date))].sort().reverse();
+  V.innerHTML=`<h2 class="page">${titulo}</h2><p class="sub">${subtitulo}</p>
     <section class="block">
       <div class="filters">
         <input id="fq" placeholder="Buscar colaborador..."/>
@@ -178,24 +200,26 @@ function vExc(){
         <select id="fset"><option value="">Todos os setores</option>${setores.map(p=>`<option>${esc(p)}</option>`).join('')}</select>
         <select id="ftip"><option value="">Todos os tipos</option>${tipos.map(t=>`<option value="${t}">${esc(tl(t))}</option>`).join('')}</select>
         <select id="fsev"><option value="">Toda gravidade</option><option value="alta">alta</option><option value="media">media</option><option value="baixa">baixa</option></select>
-        <select id="fst"><option value="">Todo status</option>${Object.keys(STL).map(s=>`<option value="${s}">${STL[s]}</option>`).join('')}</select>
+        <select id="fst"><option value="">Todo status</option>${Object.keys(stOpts).map(s=>`<option value="${s}">${stOpts[s]}</option>`).join('')}</select>
         <button class="btn g" id="csv">Exportar CSV</button>
       </div>
-      <table><thead><tr><th>Colaborador</th><th>Local de trabalho</th><th>Empresa</th><th>Setor</th><th>Apontamentos</th><th>Abertos</th><th>Pior gravidade</th></tr></thead>
+      <table><thead><tr><th>Colaborador</th><th>Local de trabalho</th><th>Empresa</th><th>Setor</th><th>Apontamentos</th><th>${isOpen?'A tratar':'Corrigidos'}</th><th>Pior gravidade</th></tr></thead>
       <tbody id="tb"></tbody></table><p class="note" id="cnt"></p>
     </section>`;
   const sevRank={critica:4,alta:3,media:2,baixa:1,informativa:0};
   const filtered=()=>{const q=val('fq').toLowerCase(),dy=val('fdia'),fl=val('ffil'),em=val('femp'),se=val('fset'),ti=val('ftip'),sv=val('fsev'),st=val('fst');
-    return EXC.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!dy||e.analyzed_date===dy)&&(!fl||e.plant===fl)&&(!em||e.company===em)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));};
+    return BASE.filter(e=>(!q||(e.display_name||'').toLowerCase().includes(q))&&(!dy||e.analyzed_date===dy)&&(!fl||e.plant===fl)&&(!em||e.company===em)&&(!se||e.department===se)&&(!ti||e.exception_type===ti)&&(!sv||e.severity===sv)&&(!st||e.status===st));};
   const draw=()=>{
     const rows=filtered(); const byEmp=new Map();
     for(const e of rows){const k=e.solides_internal_id;if(!byEmp.has(k))byEmp.set(k,{name:e.display_name,plant:e.plant,company:e.company||null,dep:e.department,items:[]});byEmp.get(k).items.push(e);}
     const groups=[...byEmp.entries()].sort((a,b)=>b[1].items.length-a[1].items.length);
     document.getElementById('tb').innerHTML=groups.slice(0,400).map(([id,g])=>{
-      const ab=g.items.filter(x=>['aberta','aguardando_revisao','confirmada'].includes(x.status)).length;
+      const cnt=isOpen
+        ?g.items.filter(x=>['aberta','aguardando_revisao','confirmada'].includes(x.status)).length
+        :g.items.filter(x=>['falso_positivo','resolvida_na_fonte'].includes(x.status)).length;
       const wr=g.items.reduce((m,x)=>Math.max(m,sevRank[x.severity]||0),0);
       const ws=['informativa','baixa','media','alta','critica'][wr]||'baixa';
-      return `<tr data-emp="${esc(id)}"><td>${esc(g.name)}</td><td>${esc(g.plant)}</td><td>${g.company?`<span style="font-size:11px">${esc(g.company)}</span>`:'<span class="muted">—</span>'}</td><td>${esc(g.dep)}</td><td><b>${g.items.length}</b></td><td>${ab}</td><td><span class="pill ${sevC(ws)}">${ws}</span></td></tr>`;
+      return `<tr data-emp="${esc(id)}"><td>${esc(g.name)}</td><td>${esc(g.plant)}</td><td>${g.company?`<span style="font-size:11px">${esc(g.company)}</span>`:'<span class="muted">—</span>'}</td><td>${esc(g.dep)}</td><td><b>${g.items.length}</b></td><td>${cnt}</td><td><span class="pill ${sevC(ws)}">${ws}</span></td></tr>`;
     }).join('');
     document.getElementById('cnt').textContent=`${groups.length} colaboradores · ${rows.length} apontamentos`;
     document.querySelectorAll('#tb tr[data-emp]').forEach(tr=>tr.onclick=()=>openColaborador(tr.dataset.emp));
@@ -203,8 +227,8 @@ function vExc(){
   };
   ['fq','fdia','ffil','femp','fset','ftip','fsev','fst'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
   document.getElementById('csv').onclick=()=>{const h=['data','colaborador','local_trabalho','empresa','setor','tipo','gravidade','status','explicacao'];
-    const ls=[h.join(';')].concat((window.__rows||EXC).map(e=>[e.analyzed_date,e.display_name,e.plant,e.company||'',e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
-    const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='excecoes.csv';a.click();};
+    const ls=[h.join(';')].concat((window.__rows||BASE).map(e=>[e.analyzed_date,e.display_name,e.plant,e.company||'',e.department,e.exception_type,e.severity,e.status,'"'+(e.explanation||'').replace(/"/g,'""')+'"'].join(';')));
+    const b=new Blob([ls.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`excecoes-${mode}.csv`;a.click();};
   if(PRESET){
     if(typeof PRESET==='object'){
       if(PRESET.fil) document.getElementById('ffil').value=PRESET.fil;
@@ -212,11 +236,9 @@ function vExc(){
       if(PRESET.sev) document.getElementById('fsev').value=PRESET.sev;
       if(PRESET.st)  document.getElementById('fst').value=PRESET.st;
     } else {
-      if(PRESET==='criticas') document.getElementById('fsev').value='alta';
-      else if(PRESET==='abertas') document.getElementById('fst').value='aberta';
-      else if(PRESET==='confirmada') document.getElementById('fst').value='confirmada';
-      else if(PRESET==='falso') document.getElementById('fst').value='falso_positivo';
-      else if(PRESET==='resolvida') document.getElementById('fst').value='resolvida_na_fonte';
+      if(PRESET==='confirmada') document.getElementById('fst').value='confirmada';
+      else if(PRESET==='falso_positivo') document.getElementById('fst').value='falso_positivo';
+      else if(PRESET==='resolvida_na_fonte') document.getElementById('fst').value='resolvida_na_fonte';
     }
     PRESET=null;
   }
