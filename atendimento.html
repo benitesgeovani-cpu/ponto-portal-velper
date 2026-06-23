@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Atendimento DP — Velper</title>
-<link rel="stylesheet" href="./assets/css/atendimento.css" />
+<link rel="stylesheet" href="./assets/css/atendimento.css?v=20260623c" />
 </head>
 <body>
 <div id="root"></div>
@@ -30,10 +30,24 @@ window.ATENDIMENTO_CONFIG = {
 </script>
 
 <!--
+  Cache busting: altere apenas V abaixo a cada deploy para forçar reload de todos os módulos JS.
+  O importmap intercepta todos os imports relativos e adiciona ?v= automaticamente.
   Ajuste 11 (aprovado): navegação de volta ao Ponto Inteligente via sidebar.
   Ajuste 2 (aprovado): estrutura modular — cada .js tem responsabilidade única.
-  auth.js é o entry point e importa os demais módulos.
 -->
-<script type="module" src="./assets/js/atendimento/auth.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "./assets/js/atendimento/api.js":             "./assets/js/atendimento/api.js?v=20260623d",
+    "./assets/js/atendimento/auth.js":            "./assets/js/atendimento/auth.js?v=20260623d",
+    "./assets/js/atendimento/requests.js":        "./assets/js/atendimento/requests.js?v=20260623d",
+    "./assets/js/atendimento/laboratory.js":      "./assets/js/atendimento/laboratory.js?v=20260623d",
+    "./assets/js/atendimento/sla.js":             "./assets/js/atendimento/sla.js?v=20260623d",
+    "./assets/js/atendimento/point-discipline.js":"./assets/js/atendimento/point-discipline.js?v=20260623d",
+    "./assets/js/atendimento/knowledge-base.js":  "./assets/js/atendimento/knowledge-base.js?v=20260623d"
+  }
+}
+</script>
+<script type="module" src="./assets/js/atendimento/auth.js?v=20260623d"></script>
 </body>
 </html>
