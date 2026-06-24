@@ -81,6 +81,7 @@ const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null, MES_VIGENTE='';
 const hmmfmt=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
 let RELATORIO=null;
+let LAST_RUN=null; // { employees_active, finished_at }
 
 async function boot(){
   // Detecta link de recuperação de senha (?type=recovery no hash ou query)
@@ -125,7 +126,7 @@ function renderLogin(msg){
 async function afterLogin(){
   const r=await sb.from('user_roles').select('role').eq('is_active',true);
   if(r.data&&r.data.length){ ROLE = r.data.some(x=>x.role==='owner')?'owner':r.data[0].role; }
-  await loadExceptions(); renderApp();
+  await Promise.all([loadExceptions(), loadLastRun()]); renderApp();
 }
 async function loadExceptions(){
   // Filtra pelo mês vigente: só exceções do período atual de conferência.
@@ -142,6 +143,11 @@ async function loadExceptions(){
     if(!data||!data.length)break; EXC.push(...data); if(data.length<size)break; from+=size;
   }
   MES_VIGENTE=anoMes;
+}
+async function loadLastRun(){
+  const {data}=await sb.from('robot_runs').select('employees_active,finished_at')
+    .in('status',['concluida','concluida_com_erros']).order('finished_at',{ascending:false}).limit(1);
+  LAST_RUN=(data&&data.length)?data[0]:null;
 }
 function countBy(arr,key){const o={};for(const a of arr)o[a[key]]=(o[a[key]]||0)+1;return o;}
 function bars(obj,kind){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);const m=Math.max(1,...e.map(x=>x[1]));
@@ -173,6 +179,7 @@ function visao(){
       ${kpi('A tratar',aTratar.length,'ver fila','alert','aTratar')}
       ${kpi('Corrigidas',corrigidas.length,'ver fila','good','corrigidas')}
       ${kpi('Total do mês',EXC.length,'ver tudo','','all')}
+      ${(()=>{const n=LAST_RUN&&LAST_RUN.employees_active!=null?LAST_RUN.employees_active:'—';const ts=LAST_RUN&&LAST_RUN.finished_at?new Date(LAST_RUN.finished_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';return kpi('Base Sólides',n,ts?'atualizado '+ts:'base de colaboradores ativos','');})()}
     </div>
     <div class="row2" style="margin-top:16px">
       <section class="block"><h3>Em aberto por filial <small style="font-size:11px;color:var(--muted);font-weight:400">— clique para filtrar</small></h3>${bars(countBy(abertosBASE,'plant'),'fil')}</section>
