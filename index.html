@@ -127,6 +127,26 @@ async function afterLogin(){
   const r=await sb.from('user_roles').select('role').eq('is_active',true);
   if(r.data&&r.data.length){ ROLE = r.data.some(x=>x.role==='owner')?'owner':r.data[0].role; }
   await Promise.all([loadExceptions(), loadLastRun()]); renderApp();
+  setupRealtime();
+}
+function setupRealtime(){
+  sb.channel('robot-runs-done')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'robot_runs'},
+      async (payload)=>{
+        const s=payload.new&&payload.new.status;
+        if(s==='concluida'||s==='concluida_com_erros'){
+          await Promise.all([loadExceptions(),loadLastRun()]);
+          renderApp();
+          showToast('Painel atualizado — robô terminou a varredura');
+        }
+      })
+    .subscribe();
+}
+function showToast(msg){
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:20px;right:20px;background:#0f2747;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:99;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:opacity .4s';
+  t.textContent=msg; document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);},4000);
 }
 async function loadExceptions(){
   // Filtra pelo mês vigente: só exceções do período atual de conferência.
