@@ -697,7 +697,7 @@ async function loadUniData(){
     sb.from('unif_purchase_orders').select('*,unif_purchase_order_items(*)').order('order_date',{ascending:false}).limit(100),
     sb.from('unif_requests').select('*,unif_request_items(*)').order('created_at',{ascending:false}).limit(200),
     sb.from('unif_audit').select('*').order('created_at',{ascending:false}).limit(500),
-    sb.from('exceptions').select('display_name,plant,department,solides_internal_id').order('display_name'),
+    sb.from('velper_employees').select('solides_id,display_name,plant,department').eq('is_active',true).order('display_name'),
   ]);
   U_PLANTS    = pl.data  || [];
   U_ITEMS     = it.data  || [];
@@ -707,10 +707,13 @@ async function loadUniData(){
   U_ORDERS    = ord.data || [];
   U_REQUESTS  = req.data || [];
   U_AUDIT     = aud_r.data || [];
-  // Deduplica por solides_internal_id mantendo o registro mais recente
-  const empMap = new Map();
-  (emp_r.data||[]).forEach(e=>{ if(!empMap.has(e.solides_internal_id)) empMap.set(e.solides_internal_id,e); });
-  U_EMPLOYEES = [...empMap.values()].sort((a,b)=>a.display_name.localeCompare(b.display_name,'pt-BR'));
+  // velper_employees já vem deduplicado (PK solides_id), só mapeia para o formato esperado
+  U_EMPLOYEES = (emp_r.data||[]).map(e=>({
+    solides_internal_id: e.solides_id,
+    display_name:        e.display_name,
+    plant:               e.plant||'',
+    department:          e.department||'',
+  }));
   U_LOADED    = true;
 }
 
