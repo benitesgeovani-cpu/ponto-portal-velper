@@ -168,7 +168,7 @@ let LAST_RUN=null;
 // ── Estado do módulo Uniformes ────────────────────────────────
 let MODULE='ponto'; // 'ponto' | 'uniformes'
 let UTAB='u_visao';
-let U_PLANTS=[], U_ITEMS=[], U_SIZES=[], U_STOCK=[], U_DELIVERIES=[], U_ORDERS=[], U_REQUESTS=[], U_AUDIT=[];
+let U_PLANTS=[], U_ITEMS=[], U_SIZES=[], U_STOCK=[], U_DELIVERIES=[], U_ORDERS=[], U_REQUESTS=[], U_AUDIT=[], U_EMPLOYEES=[];
 let U_LOADED=false;
 
 async function boot(){
@@ -280,7 +280,7 @@ function renderApp(){
   };
   const isPonto=MODULE==='ponto';
   const pontoMenu=[['visao','Visão geral'],['abertos','Em aberto'],['corrigidos','Corrigidos'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
-  const unifMenu=[['u_visao','Visão geral'],['u_estoque','Estoque'],['u_entregas','Entregas'],['u_solicitacoes','Solicitações'],['u_compras','Compras'],['u_inventario','Inventário'],...(ROLE==='owner'?[['u_audit','Auditoria']]:[]),['u_cadastros','Cadastros']];
+  const unifMenu=[['u_visao','Visão geral'],['u_estoque','Estoque'],['u_entregas','Entregas'],['u_compras','Compras'],['u_inventario','Inventário'],...(ROLE==='owner'?[['u_audit','Auditoria']]:[]),['u_cadastros','Cadastros']];
   const menu=isPonto?pontoMenu:unifMenu;
   const curTab=isPonto?TAB:UTAB;
   ROOT.innerHTML=`<div id="app">
@@ -688,7 +688,7 @@ const U_PO_STATUS={rascunho:{l:'Rascunho',c:'c-gry'},pedido_realizado:{l:'Pedido
 const U_REQ_STATUS={pendente:{l:'Pendente',c:'c-yel'},aprovada:{l:'Aprovada',c:'c-blue'},recusada:{l:'Recusada',c:'c-red'},entregue:{l:'Entregue',c:'c-grn'},cancelada:{l:'Cancelada',c:'c-gry'}};
 
 async function loadUniData(){
-  const [pl,it,sz,st,del,ord,req,aud_r]=await Promise.all([
+  const [pl,it,sz,st,del,ord,req,aud_r,emp_r]=await Promise.all([
     sb.from('unif_plants').select('*').eq('active',true).order('name'),
     sb.from('unif_items').select('*').eq('active',true).order('name'),
     sb.from('unif_sizes').select('*').eq('active',true).order('sort_order'),
@@ -697,6 +697,7 @@ async function loadUniData(){
     sb.from('unif_purchase_orders').select('*,unif_purchase_order_items(*)').order('order_date',{ascending:false}).limit(100),
     sb.from('unif_requests').select('*,unif_request_items(*)').order('created_at',{ascending:false}).limit(200),
     sb.from('unif_audit').select('*').order('created_at',{ascending:false}).limit(500),
+    sb.from('exceptions').select('display_name,plant,department,solides_internal_id').order('display_name'),
   ]);
   U_PLANTS    = pl.data  || [];
   U_ITEMS     = it.data  || [];
@@ -706,6 +707,10 @@ async function loadUniData(){
   U_ORDERS    = ord.data || [];
   U_REQUESTS  = req.data || [];
   U_AUDIT     = aud_r.data || [];
+  // Deduplica por solides_internal_id mantendo o registro mais recente
+  const empMap = new Map();
+  (emp_r.data||[]).forEach(e=>{ if(!empMap.has(e.solides_internal_id)) empMap.set(e.solides_internal_id,e); });
+  U_EMPLOYEES = [...empMap.values()].sort((a,b)=>a.display_name.localeCompare(b.display_name,'pt-BR'));
   U_LOADED    = true;
 }
 
@@ -737,7 +742,6 @@ function uVisao(){
       ${kpi('A repor',semEstoque+abaixoMin,'itens com estoque crítico','alert','u_estoque')}
       ${kpi('Entregas no mês',mesAtual.length,'entregas realizadas','good','u_entregas')}
       ${kpi('Pedidos pendentes',pedPend,'aguardando recebimento','warn','u_compras')}
-      ${kpi('Solicitações',solAguard,'aguardando aprovação','pur','u_solicitacoes')}
     </div>
     <div class="row2" style="margin-top:18px">
       <section class="block"><h3>Estoque por planta</h3>${bars(byPlant,null)}</section>
@@ -898,21 +902,19 @@ function uEntregas(){
   const V=document.getElementById('view');
   const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 
-  /* ── grade de seleção de itens para entrega ── */
+  /* ── grade de itens ── */
   const buildDelivGrid=(plantId)=>{
     if(!plantId)return'';
-    const sizes=U_SIZES;
-    const szCols=sizes.map(s=>`<th style="text-align:center;min-width:80px">${esc(s.code)}</th>`).join('');
+    const szCols=U_SIZES.map(s=>`<th style="text-align:center;min-width:80px">${esc(s.code)}</th>`).join('');
     const rows=U_ITEMS.map(item=>{
-      const cells=sizes.map(sz=>{
+      const cells=U_SIZES.map(sz=>{
         const stk=U_STOCK.find(x=>x.plant_id===plantId&&x.item_id===item.id&&x.size_id===sz.id);
         const avail=stk?stk.qty_available:0;
-        const disabled=avail===0?'disabled':'';
         const bg=avail===0?'#f9f9f9':avail<=2?'#fffbee':'#fff';
         const color=avail===0?'var(--muted)':avail<=2?'var(--amarelo)':'var(--verde)';
         return`<td style="padding:4px;text-align:center">
           <div style="font-size:10px;font-weight:700;color:${color};margin-bottom:2px">${avail} disp.</div>
-          <input type="number" min="0" max="${avail}" value="0" ${disabled}
+          <input type="number" min="0" max="${avail}" value="0" ${avail===0?'disabled':''}
             class="delv-inp" data-it="${item.id}" data-sz="${sz.id}" data-avail="${avail}"
             style="width:60px;text-align:center;padding:6px 2px;border:1.5px solid var(--linha);border-radius:6px;font-size:14px;font-weight:600;background:${bg};font-family:inherit;outline:none;${avail===0?'opacity:.35;cursor:not-allowed':''}"/>
         </td>`;
@@ -920,16 +922,15 @@ function uEntregas(){
       return`<tr><td style="padding:10px 12px;font-weight:600;white-space:nowrap;border-right:1px solid var(--linha)">${esc(item.name)}</td>${cells}</tr>`;
     }).join('');
     return`<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:0">
-      <thead><tr>
-        <th style="padding:10px 12px;text-align:left;min-width:120px;border-right:1px solid var(--linha)">Item</th>${szCols}
-        <th style="text-align:center;min-width:80px;color:var(--azul)">Total</th>
-      </tr></thead>
+      <thead><tr><th style="padding:10px 12px;text-align:left;min-width:120px;border-right:1px solid var(--linha)">Item</th>${szCols}</tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   };
 
   const refreshDelivGrid=()=>{
     const pid=val('udp');
-    document.getElementById('ud-grid').innerHTML=pid?buildDelivGrid(pid):`<p class="muted" style="text-align:center;padding:20px">Selecione a planta para ver os itens disponíveis.</p>`;
+    document.getElementById('ud-grid').innerHTML=pid
+      ?buildDelivGrid(pid)
+      :`<p class="muted" style="text-align:center;padding:20px">Selecione a planta para ver os itens disponíveis.</p>`;
     updateDelivSummary();
     document.querySelectorAll('.delv-inp').forEach(inp=>{
       inp.oninput=()=>{
@@ -940,15 +941,17 @@ function uEntregas(){
         inp.style.borderColor=q>0?'var(--azul)':'var(--linha)';
         updateDelivSummary();
       };
-      if(!inp.disabled){inp.onfocus=()=>inp.style.borderColor='var(--azul)';inp.onblur=()=>{if(!parseInt(inp.value))inp.style.borderColor='var(--linha)';};}
+      if(!inp.disabled){
+        inp.onfocus=()=>inp.style.borderColor='var(--azul)';
+        inp.onblur=()=>{if(!(parseInt(inp.value)>0))inp.style.borderColor='var(--linha)';};
+      }
     });
   };
 
   const updateDelivSummary=()=>{
     const items=getDelivItems();
     const total=items.reduce((s,i)=>s+i.qty,0);
-    const el=document.getElementById('ud-summary');
-    if(!el)return;
+    const el=document.getElementById('ud-summary');if(!el)return;
     if(!items.length){el.innerHTML='<span class="muted">Nenhum item selecionado ainda.</span>';return;}
     el.innerHTML=items.map(i=>`<span class="pill c-blue" style="margin:2px 4px 2px 0">${uItem(i.item_id)} ${uSize(i.size_id)} × ${i.qty}</span>`).join('')
       +`<span style="margin-left:8px;font-size:12px;color:var(--muted)">(${total} peça${total!==1?'s':''})</span>`;
@@ -976,22 +979,33 @@ function uEntregas(){
     </tr>`;
   }).join('');
 
-  const finpSt='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s';
+  const inpSt='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s';
   const lbSt='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';
-  const fi=(id,ph,type='text')=>`<input id="${id}" type="${type}" placeholder="${ph}" style="${finpSt}"/>`;
 
   V.innerHTML=`<h2 class="page">Entregas de Uniforme</h2>
-    <p class="sub">Selecione a planta, preencha os dados do colaborador e informe quantas peças serão entregues. O estoque é atualizado na hora.</p>
+    <p class="sub">Busque o colaborador pelo nome — planta e setor são preenchidos automaticamente. Informe as peças e confirme.</p>
 
     <section class="block">
       <h3>Nova entrega</h3>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">
-        <div><label style="${lbSt}">Planta <span style="color:var(--vermelho)">*</span></label>
-          <select id="udp" style="${finpSt}"><option value="">Selecione a planta…</option>${plantOpts}</select></div>
-        <div><label style="${lbSt}">Colaborador <span style="color:var(--vermelho)">*</span></label>${fi('udname','Nome completo')}</div>
-        <div><label style="${lbSt}">Setor</label>${fi('uddept','Ex: Produção, RH…')}</div>
-        <div><label style="${lbSt}">Responsável pela entrega <span style="color:var(--vermelho)">*</span></label>${fi('udresp','Quem entregou')}</div>
+
+        <div style="position:relative">
+          <label style="${lbSt}">Colaborador <span style="color:var(--vermelho)">*</span></label>
+          <input id="udname" autocomplete="off" placeholder="Digite o nome para buscar…" style="${inpSt}"/>
+          <div id="ud-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--azul);border-top:none;border-radius:0 0 var(--r-xs) var(--r-xs);max-height:220px;overflow-y:auto;z-index:200;box-shadow:var(--sh)"></div>
+        </div>
+
+        <div>
+          <label style="${lbSt}">Planta <span style="color:var(--vermelho)">*</span></label>
+          <select id="udp" style="${inpSt}"><option value="">Selecione…</option>${plantOpts}</select>
+        </div>
+
+        <div>
+          <label style="${lbSt}">Setor</label>
+          <input id="uddept" placeholder="Departamento" style="${inpSt}"/>
+        </div>
+
       </div>
 
       <div style="margin-bottom:16px">
@@ -1004,12 +1018,13 @@ function uEntregas(){
       </div>
 
       <div style="margin-bottom:20px">
-        <label style="${lbSt}">Observações</label>${fi('udobs','Opcional — ex: troca por desgaste no tamanho G')}
+        <label style="${lbSt}">Observações</label>
+        <input id="udobs" placeholder="Opcional" style="${inpSt}"/>
       </div>
 
       <div style="margin-bottom:6px">
         <label style="${lbSt}">Itens a entregar</label>
-        <p class="note" style="margin-bottom:10px">Preencha a quantidade de cada peça. Campos acinzentados = sem estoque nesta planta.</p>
+        <p class="note" style="margin-bottom:10px">Preencha a quantidade desejada. Campos acinzentados = sem estoque na planta selecionada.</p>
       </div>
       <div id="ud-grid"><p class="muted" style="text-align:center;padding:20px">Selecione a planta para ver os itens disponíveis.</p></div>
 
@@ -1027,10 +1042,64 @@ function uEntregas(){
       <tbody>${hiRows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Nenhuma entrega registrada.</td></tr>'}</tbody></table>
     </section>`;
 
-  // Focus style para inputs
-  V.querySelectorAll('input,select').forEach(i=>{i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  // Focus genérico
+  V.querySelectorAll('input,select').forEach(el=>{
+    el.onfocus=()=>el.style.borderColor='var(--azul)';
+    el.onblur=()=>el.style.borderColor='var(--linha)';
+  });
 
-  // Reason pills toggle
+  // ── Autocomplete colaborador ──
+  const nameInp=document.getElementById('udname');
+  const acBox=document.getElementById('ud-ac');
+
+  const closeAc=()=>{acBox.style.display='none';acBox.innerHTML='';};
+
+  const selectEmp=(emp)=>{
+    nameInp.value=emp.display_name;
+    nameInp.style.borderColor='var(--verde)';
+    closeAc();
+    // Auto-preenche planta
+    const plant=U_PLANTS.find(p=>p.name===emp.plant||p.code===emp.plant);
+    if(plant){
+      document.getElementById('udp').value=plant.id;
+      refreshDelivGrid();
+    }
+    // Auto-preenche setor
+    if(emp.department){
+      document.getElementById('uddept').value=emp.department;
+      document.getElementById('uddept').style.borderColor='var(--verde)';
+    }
+  };
+
+  nameInp.oninput=()=>{
+    const q=(nameInp.value||'').trim().toLowerCase();
+    if(q.length<2){closeAc();return;}
+    const hits=U_EMPLOYEES.filter(e=>e.display_name.toLowerCase().includes(q)).slice(0,12);
+    if(!hits.length){closeAc();return;}
+    acBox.innerHTML=hits.map(e=>`
+      <div class="ac-item" data-sid="${e.solides_internal_id}"
+        style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--linha);transition:background .1s">
+        <div style="font-weight:600;font-size:13px">${esc(e.display_name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${esc(e.plant||'')}${e.department?' · '+esc(e.department):''}</div>
+      </div>`).join('');
+    acBox.style.display='block';
+    acBox.querySelectorAll('.ac-item').forEach(item=>{
+      item.onmouseenter=()=>item.style.background='var(--azul-leve)';
+      item.onmouseleave=()=>item.style.background='';
+      item.onmousedown=(ev)=>{
+        ev.preventDefault();
+        const emp=U_EMPLOYEES.find(e=>e.solides_internal_id===item.dataset.sid);
+        if(emp)selectEmp(emp);
+      };
+    });
+  };
+
+  nameInp.onblur=()=>setTimeout(closeAc,150);
+
+  // Planta manual também atualiza grade
+  document.getElementById('udp').onchange=refreshDelivGrid;
+
+  // Reason pills
   document.getElementById('ud-reasons').querySelectorAll('.reason-pill').forEach(btn=>{
     btn.onclick=()=>{
       document.querySelectorAll('.reason-pill').forEach(b=>{b.style.background='#fff';b.style.borderColor='var(--linha)';b.style.color='var(--ink)';b.style.fontWeight='500';});
@@ -1039,27 +1108,24 @@ function uEntregas(){
     };
   });
 
-  document.getElementById('udp').onchange=refreshDelivGrid;
-
+  // Salvar
   document.getElementById('ud-save').onclick=async()=>{
     const msg=document.getElementById('ud-msg');
-    const plant=val('udp'),name=val('udname').trim(),dept=val('uddept').trim(),resp=val('udresp').trim(),reason=val('udreason');
+    const plant=val('udp'),name=val('udname').trim(),dept=val('uddept').trim(),reason=val('udreason');
+    if(!name){msg.style.color='var(--vermelho)';msg.textContent='Informe o colaborador.';return;}
     if(!plant){msg.style.color='var(--vermelho)';msg.textContent='Selecione a planta.';return;}
-    if(!name){msg.style.color='var(--vermelho)';msg.textContent='Informe o nome do colaborador.';return;}
-    if(!resp){msg.style.color='var(--vermelho)';msg.textContent='Informe o responsável pela entrega.';return;}
     if(!reason){msg.style.color='var(--vermelho)';msg.textContent='Selecione o motivo.';return;}
     const items=getDelivItems();
     if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Informe ao menos uma peça na grade acima.';return;}
-    // Validação client-side antes de chamar o banco
     const overstock=items.filter(i=>{
       const avail=parseInt(document.querySelector(`.delv-inp[data-it="${i.item_id}"][data-sz="${i.size_id}"]`)?.dataset.avail||'0');
       return i.qty>avail;
     });
-    if(overstock.length){msg.style.color='var(--vermelho)';msg.textContent='Quantidade solicitada excede o estoque disponível.';return;}
+    if(overstock.length){msg.style.color='var(--vermelho)';msg.textContent='Quantidade excede o estoque disponível.';return;}
     msg.style.color='var(--muted)';msg.textContent='Registrando…';
     const{data,error}=await sb.rpc('registrar_entrega',{
       p_plant_id:plant,p_employee_id:null,p_employee_name:name,p_employee_dept:dept||null,
-      p_reason:reason,p_responsible:resp,p_obs:val('udobs')||null,
+      p_reason:reason,p_responsible:'DP',p_obs:val('udobs')||null,
       p_items:items,p_user_id:USER.id
     });
     if(error){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+error.message;return;}
