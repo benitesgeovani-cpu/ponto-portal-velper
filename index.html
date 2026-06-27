@@ -759,34 +759,96 @@ function uVisao(){
 function uEstoque(){
   const V=document.getElementById('view');
   const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
-  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
 
+  /* ── grade de lançamento ── */
+  const buildGrid=(plantId,mode)=>{
+    if(!plantId)return'';
+    const sizes=U_SIZES;
+    const szCols=sizes.map(s=>`<th style="text-align:center;min-width:64px">${esc(s.code)}</th>`).join('');
+    const rows=U_ITEMS.map(item=>{
+      const cells=sizes.map(sz=>{
+        const cur=U_STOCK.find(x=>x.plant_id===plantId&&x.item_id===item.id&&x.size_id===sz.id);
+        const curQty=cur?cur.qty_available:0;
+        const bg=curQty===0?'#fff8f8':curQty>0&&cur&&curQty<=cur.qty_minimum?'#fffbee':'#f8fff9';
+        const initVal=mode==='adicionar'?0:curQty;
+        return`<td style="padding:4px;text-align:center">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">atual: ${curQty}</div>
+          <input type="number" min="0" value="${initVal}"
+            class="grd-inp" data-it="${item.id}" data-sz="${sz.id}"
+            style="width:56px;text-align:center;padding:6px 4px;border:1.5px solid var(--linha);border-radius:6px;font-size:14px;font-weight:600;background:${bg};font-family:inherit;outline:none"/>
+        </td>`;
+      }).join('');
+      return`<tr><td style="padding:10px 12px;font-weight:600;white-space:nowrap">${esc(item.name)}</td>${cells}</tr>`;
+    }).join('');
+    return`<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:0">
+      <thead><tr><th style="padding:10px 12px;text-align:left;min-width:120px">Item</th>${szCols}</tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  };
+
+  const refreshGrid=()=>{
+    const pid=val('ug-plant'),mode=val('ug-mode');
+    document.getElementById('ug-grid').innerHTML=pid?buildGrid(pid,mode):`<p class="muted" style="text-align:center;padding:20px">Selecione uma planta para ver a grade.</p>`;
+    document.querySelectorAll('.grd-inp').forEach(inp=>{
+      inp.onfocus=()=>inp.style.borderColor='var(--azul)';
+      inp.onblur=()=>inp.style.borderColor='var(--linha)';
+    });
+  };
+
+  /* ── tabela de saldo ── */
   const renderTable=()=>{
-    const fp=val('ufp'),fi=val('ufi'),fs=val('ufs'),fst=val('ufst');
-    const rows=U_STOCK.filter(s=>
-      (!fp||s.plant_id===fp)&&(!fi||s.item_id===fi)&&(!fs||s.size_id===fs)
-    ).map(s=>{
+    const fp=val('ufp'),fst=val('ufst');
+    const rows=U_STOCK.filter(s=>!fp||s.plant_id===fp).map(s=>{
       const st=uStockSt(s.qty_available,s.qty_minimum);
       if(fst&&fst!==st.l)return null;
-      return`<tr>
-        <td>${uPlant(s.plant_id)}</td><td>${uItem(s.item_id)}</td><td>${uSize(s.size_id)}</td>
-        <td><b>${s.qty_available}</b></td><td>${s.qty_minimum}</td>
+      return`<tr><td>${uPlant(s.plant_id)}</td><td>${uItem(s.item_id)}</td><td><b>${uSize(s.size_id)}</b></td>
+        <td><b style="font-size:16px;color:${s.qty_available===0?'var(--vermelho)':s.qty_available<=s.qty_minimum?'var(--amarelo)':'var(--ink)'}">${s.qty_available}</b></td>
+        <td style="color:var(--muted)">${s.qty_minimum}</td>
         <td><span class="pill ${st.c}">${st.l}</span></td>
-        <td style="font-size:12px;color:var(--muted)">${s.last_movement_at?uDate(s.last_movement_at.slice(0,10)):'—'}</td>
-      </tr>`;
+        <td style="font-size:12px;color:var(--muted)">${s.last_movement_at?uDate(s.last_movement_at.slice(0,10)):'—'}</td></tr>`;
     }).filter(Boolean);
-    document.getElementById('utb').innerHTML=rows.length?rows.join(''):`<tr><td colspan="7" style="text-align:center;padding:24px" class="muted">Nenhum registro encontrado.</td></tr>`;
-    document.getElementById('ucnt').textContent=`${rows.length} registro(s)`;
+    document.getElementById('utb').innerHTML=rows.length?rows.join(''):`<tr><td colspan="7" style="text-align:center;padding:24px" class="muted">Sem saldo cadastrado. Use o lançamento acima para inserir o estoque atual.</td></tr>`;
+    document.getElementById('ucnt').textContent=`${rows.length} linha(s)`;
   };
 
   V.innerHTML=`<h2 class="page">Estoque</h2>
-    <p class="sub">Saldo atual por planta, item e tamanho. Toda movimentação é rastreável.</p>
+    <p class="sub">Lance o estoque atual e acompanhe cada movimentação. Entradas, saídas e ajustes ficam todos registrados.</p>
+
     <section class="block">
-      <div class="filters">
+      <h3>Lançar / Ajustar estoque</h3>
+      <p class="note" style="margin-bottom:14px">
+        Use <b>Definir</b> para informar a quantidade exata que existe agora (lançamento inicial ou conferência).
+        Use <b>Adicionar</b> para somar ao saldo (ex.: chegou mais mercadoria sem NF formal).
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px">Planta</label>
+          <select id="ug-plant" style="padding:10px 14px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;min-width:160px;outline:none">
+            <option value="">Selecione…</option>${plantOpts}
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px">Modo</label>
+          <select id="ug-mode" style="padding:10px 14px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none">
+            <option value="definir">Definir quantidade (substituir)</option>
+            <option value="adicionar">Adicionar ao saldo atual</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px">Observação</label>
+          <input id="ug-obs" placeholder="Ex: Lançamento inicial jun/2026, Recebimento avulso…" style="width:100%;padding:10px 14px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none"/>
+        </div>
+      </div>
+      <div id="ug-grid" style="margin-bottom:16px"><p class="muted" style="text-align:center;padding:20px">Selecione uma planta para ver a grade.</p></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" id="ug-save">Salvar estoque</button>
+        <span id="ug-msg" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+    </section>
+
+    <section class="block" style="margin-top:18px">
+      <h3>Saldo atual</h3>
+      <div class="filters" style="margin-bottom:12px">
         <select id="ufp"><option value="">Todas as plantas</option>${plantOpts}</select>
-        <select id="ufi"><option value="">Todos os itens</option>${itemOpts}</select>
-        <select id="ufs"><option value="">Todos os tamanhos</option>${sizeOpts}</select>
         <select id="ufst"><option value="">Toda situação</option>
           <option>Regular</option><option>Atenção</option><option>Reposição necessária</option><option>Sem estoque</option>
         </select>
@@ -795,7 +857,39 @@ function uEstoque(){
       <tbody id="utb"></tbody></table>
       <p class="note" id="ucnt"></p>
     </section>`;
-  ['ufp','ufi','ufs','ufst'].forEach(id=>document.getElementById(id).addEventListener('change',renderTable));
+
+  document.getElementById('ug-plant').onchange=refreshGrid;
+  document.getElementById('ug-mode').onchange=refreshGrid;
+  document.getElementById('ug-plant').onfocus=e=>e.target.style.borderColor='var(--azul)';
+  document.getElementById('ug-plant').onblur=e=>e.target.style.borderColor='var(--linha)';
+  document.getElementById('ug-obs').onfocus=e=>e.target.style.borderColor='var(--azul)';
+  document.getElementById('ug-obs').onblur=e=>e.target.style.borderColor='var(--linha)';
+  ['ufp','ufst'].forEach(id=>document.getElementById(id).addEventListener('change',renderTable));
+
+  document.getElementById('ug-save').onclick=async()=>{
+    const msg=document.getElementById('ug-msg');
+    const pid=val('ug-plant'),mode=val('ug-mode'),obs=val('ug-obs').trim();
+    if(!pid){msg.style.color='var(--vermelho)';msg.textContent='Selecione a planta.';return;}
+    const items=[];
+    document.querySelectorAll('.grd-inp').forEach(inp=>{
+      const q=parseInt(inp.value);
+      if(!isNaN(q)&&q>=0)items.push({item_id:inp.dataset.it,size_id:inp.dataset.sz,qty:q,mode});
+    });
+    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Nenhum item na grade.';return;}
+    msg.style.color='var(--muted)';msg.textContent='Salvando…';
+    const{error}=await sb.rpc('ajustar_estoque_avulso',{
+      p_plant_id:pid,p_items:items,
+      p_obs:obs||(mode==='definir'?'Lançamento de estoque':'Adição avulsa de estoque'),
+      p_user_id:USER.id
+    });
+    if(error){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+error.message;return;}
+    await loadUniData();
+    msg.style.color='var(--verde)';msg.textContent='Salvo com sucesso!';
+    refreshGrid();renderTable();
+    showToast('Estoque atualizado com sucesso.');
+    setTimeout(()=>msg.textContent='',3000);
+  };
+
   renderTable();
 }
 
@@ -803,16 +897,78 @@ function uEstoque(){
 function uEntregas(){
   const V=document.getElementById('view');
   const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
-  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
-  const reasonOpts=Object.entries(U_REASON_LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+
+  /* ── grade de seleção de itens para entrega ── */
+  const buildDelivGrid=(plantId)=>{
+    if(!plantId)return'';
+    const sizes=U_SIZES;
+    const szCols=sizes.map(s=>`<th style="text-align:center;min-width:80px">${esc(s.code)}</th>`).join('');
+    const rows=U_ITEMS.map(item=>{
+      const cells=sizes.map(sz=>{
+        const stk=U_STOCK.find(x=>x.plant_id===plantId&&x.item_id===item.id&&x.size_id===sz.id);
+        const avail=stk?stk.qty_available:0;
+        const disabled=avail===0?'disabled':'';
+        const bg=avail===0?'#f9f9f9':avail<=2?'#fffbee':'#fff';
+        const color=avail===0?'var(--muted)':avail<=2?'var(--amarelo)':'var(--verde)';
+        return`<td style="padding:4px;text-align:center">
+          <div style="font-size:10px;font-weight:700;color:${color};margin-bottom:2px">${avail} disp.</div>
+          <input type="number" min="0" max="${avail}" value="0" ${disabled}
+            class="delv-inp" data-it="${item.id}" data-sz="${sz.id}" data-avail="${avail}"
+            style="width:60px;text-align:center;padding:6px 2px;border:1.5px solid var(--linha);border-radius:6px;font-size:14px;font-weight:600;background:${bg};font-family:inherit;outline:none;${avail===0?'opacity:.35;cursor:not-allowed':''}"/>
+        </td>`;
+      }).join('');
+      return`<tr><td style="padding:10px 12px;font-weight:600;white-space:nowrap;border-right:1px solid var(--linha)">${esc(item.name)}</td>${cells}</tr>`;
+    }).join('');
+    return`<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:0">
+      <thead><tr>
+        <th style="padding:10px 12px;text-align:left;min-width:120px;border-right:1px solid var(--linha)">Item</th>${szCols}
+        <th style="text-align:center;min-width:80px;color:var(--azul)">Total</th>
+      </tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  };
+
+  const refreshDelivGrid=()=>{
+    const pid=val('udp');
+    document.getElementById('ud-grid').innerHTML=pid?buildDelivGrid(pid):`<p class="muted" style="text-align:center;padding:20px">Selecione a planta para ver os itens disponíveis.</p>`;
+    updateDelivSummary();
+    document.querySelectorAll('.delv-inp').forEach(inp=>{
+      inp.oninput=()=>{
+        const avail=parseInt(inp.dataset.avail)||0;
+        let q=parseInt(inp.value)||0;
+        if(q>avail){inp.value=avail;q=avail;}
+        if(q<0){inp.value=0;q=0;}
+        inp.style.borderColor=q>0?'var(--azul)':'var(--linha)';
+        updateDelivSummary();
+      };
+      if(!inp.disabled){inp.onfocus=()=>inp.style.borderColor='var(--azul)';inp.onblur=()=>{if(!parseInt(inp.value))inp.style.borderColor='var(--linha)';};}
+    });
+  };
+
+  const updateDelivSummary=()=>{
+    const items=getDelivItems();
+    const total=items.reduce((s,i)=>s+i.qty,0);
+    const el=document.getElementById('ud-summary');
+    if(!el)return;
+    if(!items.length){el.innerHTML='<span class="muted">Nenhum item selecionado ainda.</span>';return;}
+    el.innerHTML=items.map(i=>`<span class="pill c-blue" style="margin:2px 4px 2px 0">${uItem(i.item_id)} ${uSize(i.size_id)} × ${i.qty}</span>`).join('')
+      +`<span style="margin-left:8px;font-size:12px;color:var(--muted)">(${total} peça${total!==1?'s':''})</span>`;
+  };
+
+  const getDelivItems=()=>{
+    const items=[];
+    document.querySelectorAll('.delv-inp').forEach(inp=>{
+      const q=parseInt(inp.value)||0;
+      if(q>0)items.push({item_id:inp.dataset.it,size_id:inp.dataset.sz,qty:q});
+    });
+    return items;
+  };
 
   // Tabela histórico
   const hiRows=U_DELIVERIES.slice(0,100).map(d=>{
     const its=d.unif_delivery_items||[];
-    const resumo=its.map(i=>`${uItem(i.item_id)} ${uSize(i.size_id)} ×${i.qty}`).join(', ');
-    return`<tr data-del="${d.id}">
-      <td>${esc(d.protocol)}</td><td>${esc(d.employee_name)}</td><td>${uPlant(d.plant_id)}</td>
+    const resumo=its.map(i=>`${uItem(i.item_id)} ${uSize(i.size_id)}×${i.qty}`).join(', ');
+    return`<tr data-del="${d.id}" style="cursor:pointer">
+      <td><b style="color:var(--azul)">${esc(d.protocol)}</b></td><td>${esc(d.employee_name)}</td><td>${uPlant(d.plant_id)}</td>
       <td style="font-size:12px">${resumo||'—'}</td>
       <td>${uDate(d.delivered_at?d.delivered_at.slice(0,10):'')}</td>
       <td>${U_REASON_LABELS[d.reason]||d.reason}</td>
@@ -820,83 +976,89 @@ function uEntregas(){
     </tr>`;
   }).join('');
 
+  const finpSt='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s';
+  const lbSt='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';
+  const fi=(id,ph,type='text')=>`<input id="${id}" type="${type}" placeholder="${ph}" style="${finpSt}"/>`;
+
   V.innerHTML=`<h2 class="page">Entregas de Uniforme</h2>
-    <p class="sub">Registro de retirada de uniforme por colaborador. O estoque é atualizado automaticamente.</p>
+    <p class="sub">Selecione a planta, preencha os dados do colaborador e informe quantas peças serão entregues. O estoque é atualizado na hora.</p>
+
     <section class="block">
       <h3>Nova entrega</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div><label class="fl">Planta</label><select id="udp" class="finp"><option value="">Selecione…</option>${plantOpts}</select></div>
-        <div><label class="fl">Colaborador</label><input id="udname" class="finp" placeholder="Nome completo"/></div>
-        <div><label class="fl">Setor</label><input id="uddept" class="finp" placeholder="Departamento"/></div>
-        <div><label class="fl">Responsável pela entrega</label><input id="udresp" class="finp" placeholder="Nome de quem entregou"/></div>
-        <div><label class="fl">Motivo</label><select id="udreason" class="finp"><option value="">Selecione…</option>${reasonOpts}</select></div>
-        <div><label class="fl">Observações</label><input id="udobs" class="finp" placeholder="Opcional"/></div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">
+        <div><label style="${lbSt}">Planta <span style="color:var(--vermelho)">*</span></label>
+          <select id="udp" style="${finpSt}"><option value="">Selecione a planta…</option>${plantOpts}</select></div>
+        <div><label style="${lbSt}">Colaborador <span style="color:var(--vermelho)">*</span></label>${fi('udname','Nome completo')}</div>
+        <div><label style="${lbSt}">Setor</label>${fi('uddept','Ex: Produção, RH…')}</div>
+        <div><label style="${lbSt}">Responsável pela entrega <span style="color:var(--vermelho)">*</span></label>${fi('udresp','Quem entregou')}</div>
       </div>
-      <div id="ud-items" style="margin-top:16px">
-        <b style="font-size:13px">Itens da entrega:</b>
-        <div id="ud-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
-        <button class="btn g" id="ud-add" style="margin-top:10px">+ Adicionar item</button>
+
+      <div style="margin-bottom:16px">
+        <label style="${lbSt}">Motivo <span style="color:var(--vermelho)">*</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px" id="ud-reasons">
+          ${Object.entries(U_REASON_LABELS).map(([k,v])=>`<button type="button" class="reason-pill" data-r="${k}"
+            style="padding:8px 14px;border-radius:20px;border:1.5px solid var(--linha);background:#fff;font-size:13px;font-family:inherit;cursor:pointer;transition:all .15s;font-weight:500;color:var(--ink)">${v}</button>`).join('')}
+        </div>
+        <input type="hidden" id="udreason" value=""/>
       </div>
-      <div style="margin-top:16px;display:flex;gap:8px">
+
+      <div style="margin-bottom:20px">
+        <label style="${lbSt}">Observações</label>${fi('udobs','Opcional — ex: troca por desgaste no tamanho G')}
+      </div>
+
+      <div style="margin-bottom:6px">
+        <label style="${lbSt}">Itens a entregar</label>
+        <p class="note" style="margin-bottom:10px">Preencha a quantidade de cada peça. Campos acinzentados = sem estoque nesta planta.</p>
+      </div>
+      <div id="ud-grid"><p class="muted" style="text-align:center;padding:20px">Selecione a planta para ver os itens disponíveis.</p></div>
+
+      <div id="ud-summary" style="margin:14px 0 4px;min-height:28px"><span class="muted">Nenhum item selecionado ainda.</span></div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
         <button class="btn" id="ud-save">Confirmar entrega</button>
-        <span class="muted" id="ud-msg" style="line-height:2.2"></span>
+        <span id="ud-msg" style="font-size:13px;color:var(--muted)"></span>
       </div>
     </section>
+
     <section class="block" style="margin-top:18px">
       <h3>Histórico de entregas</h3>
       <table><thead><tr><th>Protocolo</th><th>Colaborador</th><th>Planta</th><th>Itens</th><th>Data</th><th>Motivo</th><th>Status</th></tr></thead>
       <tbody>${hiRows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Nenhuma entrega registrada.</td></tr>'}</tbody></table>
     </section>`;
 
-  // Estilo inline para labels/inputs no form
-  V.querySelectorAll('.fl').forEach(l=>{l.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';});
-  V.querySelectorAll('.finp').forEach(i=>{i.style.cssText='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  // Focus style para inputs
+  V.querySelectorAll('input,select').forEach(i=>{i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
 
-  let lineCount=0;
-  const addLine=()=>{
-    lineCount++;
-    const d=document.createElement('div');
-    d.style.cssText='display:flex;gap:8px;align-items:center';
-    d.innerHTML=`<select class="finp udi" data-f="item" style="flex:1"><option value="">Item…</option>${itemOpts}</select>
-      <select class="finp udi" data-f="size" style="width:90px"><option value="">Tam…</option>${sizeOpts}</select>
-      <input class="finp udi" data-f="qty" type="number" min="1" value="1" style="width:70px"/>
-      <span id="ud-avail-${lineCount}" style="font-size:12px;color:var(--muted);white-space:nowrap;width:80px"></span>
-      <button style="background:none;border:none;color:var(--vermelho);font-size:18px;cursor:pointer" title="Remover">×</button>`;
-    d.querySelector('button').onclick=()=>d.remove();
-    const upd=async()=>{
-      const itId=d.querySelector('[data-f=item]').value;
-      const szId=d.querySelector('[data-f=size]').value;
-      const plId=val('udp');
-      const sp=document.getElementById(`ud-avail-${lineCount}`);
-      if(itId&&szId&&plId){
-        const s=U_STOCK.find(x=>x.plant_id===plId&&x.item_id===itId&&x.size_id===szId);
-        sp.textContent=s?`Disponível: ${s.qty_available}`:'Sem saldo';
-        sp.style.color=s&&s.qty_available>0?'var(--verde)':'var(--vermelho)';
-      }
+  // Reason pills toggle
+  document.getElementById('ud-reasons').querySelectorAll('.reason-pill').forEach(btn=>{
+    btn.onclick=()=>{
+      document.querySelectorAll('.reason-pill').forEach(b=>{b.style.background='#fff';b.style.borderColor='var(--linha)';b.style.color='var(--ink)';b.style.fontWeight='500';});
+      btn.style.background='var(--azul)';btn.style.borderColor='var(--azul)';btn.style.color='#fff';btn.style.fontWeight='700';
+      document.getElementById('udreason').value=btn.dataset.r;
     };
-    d.querySelectorAll('select').forEach(s=>s.onchange=upd);
-    document.getElementById('ud-lines').appendChild(d);
-    d.querySelectorAll('.finp').forEach(i=>{i.style.borderColor='var(--linha)';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
-  };
-  document.getElementById('ud-add').onclick=addLine;
-  document.getElementById('udp').onchange=()=>document.querySelectorAll('[id^=ud-avail-]').forEach(e=>e.textContent='');
-  addLine();
+  });
+
+  document.getElementById('udp').onchange=refreshDelivGrid;
 
   document.getElementById('ud-save').onclick=async()=>{
     const msg=document.getElementById('ud-msg');
     const plant=val('udp'),name=val('udname').trim(),dept=val('uddept').trim(),resp=val('udresp').trim(),reason=val('udreason');
-    if(!plant||!name||!resp||!reason){msg.style.color='var(--vermelho)';msg.textContent='Preencha todos os campos obrigatórios.';return;}
-    const items=[];
-    document.querySelectorAll('#ud-lines > div').forEach(d=>{
-      const it=d.querySelector('[data-f=item]').value;
-      const sz=d.querySelector('[data-f=size]').value;
-      const q=parseInt(d.querySelector('[data-f=qty]').value)||0;
-      if(it&&sz&&q>0)items.push({item_id:it,size_id:sz,qty:q});
+    if(!plant){msg.style.color='var(--vermelho)';msg.textContent='Selecione a planta.';return;}
+    if(!name){msg.style.color='var(--vermelho)';msg.textContent='Informe o nome do colaborador.';return;}
+    if(!resp){msg.style.color='var(--vermelho)';msg.textContent='Informe o responsável pela entrega.';return;}
+    if(!reason){msg.style.color='var(--vermelho)';msg.textContent='Selecione o motivo.';return;}
+    const items=getDelivItems();
+    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Informe ao menos uma peça na grade acima.';return;}
+    // Validação client-side antes de chamar o banco
+    const overstock=items.filter(i=>{
+      const avail=parseInt(document.querySelector(`.delv-inp[data-it="${i.item_id}"][data-sz="${i.size_id}"]`)?.dataset.avail||'0');
+      return i.qty>avail;
     });
-    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Adicione pelo menos um item.';return;}
+    if(overstock.length){msg.style.color='var(--vermelho)';msg.textContent='Quantidade solicitada excede o estoque disponível.';return;}
     msg.style.color='var(--muted)';msg.textContent='Registrando…';
     const{data,error}=await sb.rpc('registrar_entrega',{
-      p_plant_id:plant,p_employee_id:null,p_employee_name:name,p_employee_dept:dept,
+      p_plant_id:plant,p_employee_id:null,p_employee_name:name,p_employee_dept:dept||null,
       p_reason:reason,p_responsible:resp,p_obs:val('udobs')||null,
       p_items:items,p_user_id:USER.id
     });
@@ -906,8 +1068,6 @@ function uEntregas(){
     UTAB='u_entregas';renderApp();
   };
 
-  // Drawer cancelamento
-  V.querySelectorAll('tr[data-del]').forEach(tr=>tr.style.cursor='pointer');
   V.querySelectorAll('tr[data-del]').forEach(tr=>tr.onclick=()=>openDeliveryDrawer(tr.dataset.del));
 }
 
