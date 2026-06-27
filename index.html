@@ -115,6 +115,11 @@ tbody tr{transition:background .12s} tbody tr:hover{background:#F7F9FF;cursor:po
 .opts button:hover{border-color:var(--azul);color:var(--azul)} .opts button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
 textarea{width:100%;border:1.5px solid var(--linha);border-radius:var(--r-sm);padding:12px;font-family:inherit;font-size:13px;min-height:64px;outline:none;transition:border-color .15s;resize:vertical}
 textarea:focus{border-color:var(--azul)}
+/* ── MODULE SWITCHER ── */
+.mod-switch{display:flex;gap:6px;padding:0 2px 16px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,.07)}
+.mod-btn{flex:1;background:rgba(255,255,255,.07);border:none;border-radius:8px;padding:8px 6px;color:#8AAED4;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;transition:all .15s;cursor:pointer;line-height:1.2}
+.mod-btn:hover{background:rgba(255,255,255,.12);color:#fff}
+.mod-btn.on{background:var(--azul);color:#fff;box-shadow:0 2px 10px rgba(36,87,235,.4)}
 /* ── MOBILE ── */
 .overlay-mob{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:29}
 .overlay-mob.open{display:block}
@@ -159,7 +164,12 @@ const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null, MES_VIGENTE='';
 const hmmfmt=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
 let RELATORIO=null;
-let LAST_RUN=null; // { employees_active, finished_at }
+let LAST_RUN=null;
+// ── Estado do módulo Uniformes ────────────────────────────────
+let MODULE='ponto'; // 'ponto' | 'uniformes'
+let UTAB='u_visao';
+let U_PLANTS=[], U_ITEMS=[], U_SIZES=[], U_STOCK=[], U_DELIVERIES=[], U_ORDERS=[], U_REQUESTS=[], U_AUDIT=[];
+let U_LOADED=false;
 
 async function boot(){
   // Detecta link de recuperação de senha (?type=recovery no hash ou query)
@@ -259,27 +269,56 @@ function renderApp(){
     corrigidos:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     fech:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
     aud:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    u_visao:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    u_estoque:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>',
+    u_entregas:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+    u_solicitacoes:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>',
+    u_compras:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>',
+    u_inventario:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>',
+    u_audit:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    u_cadastros:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>',
   };
-  const menu=[['visao','Visão geral'],['abertos','Em aberto'],['corrigidos','Corrigidos'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
+  const isPonto=MODULE==='ponto';
+  const pontoMenu=[['visao','Visão geral'],['abertos','Em aberto'],['corrigidos','Corrigidos'],['fech','Fechamento mensal'],...(ROLE==='owner'?[['aud','Auditoria']]:[])];
+  const unifMenu=[['u_visao','Visão geral'],['u_estoque','Estoque'],['u_entregas','Entregas'],['u_solicitacoes','Solicitações'],['u_compras','Compras'],['u_inventario','Inventário'],...(ROLE==='owner'?[['u_audit','Auditoria']]:[]),['u_cadastros','Cadastros']];
+  const menu=isPonto?pontoMenu:unifMenu;
+  const curTab=isPonto?TAB:UTAB;
   ROOT.innerHTML=`<div id="app">
     <div class="overlay-mob" id="mob-ov"></div>
-    <aside id="sidebar"><div class="brand">Ponto Inteligente DP<small>Grupo Velper · DP</small></div>
-      <nav>${menu.map(m=>`<a data-k="${m[0]}" class="${m[0]===TAB?'on':''}">${IC[m[0]]||''}${m[1]}</a>`).join('')}</nav>
+    <aside id="sidebar">
+      <div class="brand">Velper DP<small>Plataforma Inteligente</small></div>
+      <div class="mod-switch">
+        <button class="mod-btn ${isPonto?'on':''}" data-m="ponto">Ponto DP</button>
+        <button class="mod-btn ${!isPonto?'on':''}" data-m="uniformes">Uniformes</button>
+      </div>
+      <nav>${menu.map(m=>`<a data-k="${m[0]}" class="${m[0]===curTab?'on':''}">${IC[m[0]]||''}${m[1]}</a>`).join('')}</nav>
       <div class="sidebar-footer"><div class="sf-tag">Velper · Piloto</div></div>
     </aside>
     <main><div class="topbar">
       <div style="display:flex;align-items:center;gap:14px">
         <button id="menu-toggle" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
-        <span class="seal">Modo piloto — somente leitura na Sólides</span>
+        <span class="seal">${isPonto?'Modo piloto — somente leitura na Sólides':'Uniformes Inteligentes'}</span>
       </div>
       <div class="u">Conectado: <b>${esc(USER.email)}</b> (${ROLE})<span class="sair" id="sair">Sair</span></div>
     </div>
       <div class="content" id="view"></div></main></div>`;
-  document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{TAB=a.dataset.k;PRESET=null;renderApp();});
+  document.querySelectorAll('aside .mod-btn').forEach(b=>b.onclick=async()=>{
+    MODULE=b.dataset.m;
+    if(MODULE==='uniformes'&&!U_LOADED){showToast('Carregando dados…');await loadUniData();}
+    renderApp();
+  });
+  document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{
+    if(isPonto){TAB=a.dataset.k;PRESET=null;}else{UTAB=a.dataset.k;}
+    renderApp();
+  });
   document.getElementById('sair').onclick=async()=>{await sb.auth.signOut();location.reload();};
   document.getElementById('menu-toggle').onclick=()=>{document.getElementById('sidebar').classList.toggle('open');document.getElementById('mob-ov').classList.toggle('open');};
   document.getElementById('mob-ov').onclick=()=>{document.getElementById('sidebar').classList.remove('open');document.getElementById('mob-ov').classList.remove('open');};
-  ({visao,abertos:()=>vExc('abertos'),corrigidos:()=>vExc('corrigidos'),fech,aud}[TAB]||visao)();
+  if(isPonto){
+    ({visao,abertos:()=>vExc('abertos'),corrigidos:()=>vExc('corrigidos'),fech,aud}[TAB]||visao)();
+  } else {
+    ({u_visao:uVisao,u_estoque:uEstoque,u_entregas:uEntregas,u_solicitacoes:uSolicitacoes,u_compras:uCompras,u_inventario:uInventario,u_audit:uAudit,u_cadastros:uCadastros}[UTAB]||uVisao)();
+  }
 }
 function effStatusList(){return EXC;}
 
@@ -629,6 +668,766 @@ function gerarExcel(){
 }
 
 function aud(){document.getElementById('view').innerHTML=`<h2 class="page">Auditoria</h2><p class="sub">Registro de classificações.</p><section class="block"><p class="muted">A trilha de auditoria detalhada aparece aqui conforme o uso (quem classificou o quê). Visível apenas para o owner.</p></section>`;}
+
+// ════════════════════════════════════════════════════════════
+// MÓDULO UNIFORMES INTELIGENTES
+// ════════════════════════════════════════════════════════════
+const uBRL=n=>n==null?'—':'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const uDate=s=>s?s.split('-').reverse().join('/'):'—';
+const uPlant=id=>(U_PLANTS.find(p=>p.id===id)||{name:'—'}).name;
+const uItem=id=>(U_ITEMS.find(i=>i.id===id)||{name:'—'}).name;
+const uSize=id=>(U_SIZES.find(s=>s.id===id)||{code:'—'}).code;
+function uStockSt(avail,min){
+  if(avail===0)return{l:'Sem estoque',c:'c-red'};
+  if(avail<=min)return{l:'Reposição necessária',c:'c-red'};
+  if(avail<=min*1.3)return{l:'Atenção',c:'c-yel'};
+  return{l:'Regular',c:'c-grn'};
+}
+const U_REASON_LABELS={admissao:'Admissão',troca_desgaste:'Troca por desgaste',troca_tamanho:'Troca de tamanho',mudanca_funcao:'Mudança de função',reposicao_periodica:'Reposição periódica',perda_dano:'Perda ou dano',entrega_excepcional:'Entrega excepcional',outro:'Outro'};
+const U_PO_STATUS={rascunho:{l:'Rascunho',c:'c-gry'},pedido_realizado:{l:'Pedido realizado',c:'c-blue'},aguardando_recebimento:{l:'Aguardando recebimento',c:'c-yel'},recebido_parcial:{l:'Recebido parcialmente',c:'c-yel'},recebido:{l:'Recebido',c:'c-grn'},em_atraso:{l:'Em atraso',c:'c-red'},cancelado:{l:'Cancelado',c:'c-gry'}};
+const U_REQ_STATUS={pendente:{l:'Pendente',c:'c-yel'},aprovada:{l:'Aprovada',c:'c-blue'},recusada:{l:'Recusada',c:'c-red'},entregue:{l:'Entregue',c:'c-grn'},cancelada:{l:'Cancelada',c:'c-gry'}};
+
+async function loadUniData(){
+  const [pl,it,sz,st,del,ord,req,aud_r]=await Promise.all([
+    sb.from('unif_plants').select('*').eq('active',true).order('name'),
+    sb.from('unif_items').select('*').eq('active',true).order('name'),
+    sb.from('unif_sizes').select('*').eq('active',true).order('sort_order'),
+    sb.from('unif_stock').select('*'),
+    sb.from('unif_deliveries').select('*,unif_delivery_items(*)').order('delivered_at',{ascending:false}).limit(200),
+    sb.from('unif_purchase_orders').select('*,unif_purchase_order_items(*)').order('order_date',{ascending:false}).limit(100),
+    sb.from('unif_requests').select('*,unif_request_items(*)').order('created_at',{ascending:false}).limit(200),
+    sb.from('unif_audit').select('*').order('created_at',{ascending:false}).limit(500),
+  ]);
+  U_PLANTS    = pl.data  || [];
+  U_ITEMS     = it.data  || [];
+  U_SIZES     = sz.data  || [];
+  U_STOCK     = st.data  || [];
+  U_DELIVERIES= del.data || [];
+  U_ORDERS    = ord.data || [];
+  U_REQUESTS  = req.data || [];
+  U_AUDIT     = aud_r.data || [];
+  U_LOADED    = true;
+}
+
+// ── VISÃO GERAL ───────────────────────────────────────────────
+function uVisao(){
+  const V=document.getElementById('view');
+  const hoje=new Date().toISOString().slice(0,7);
+  const mesAtual=U_DELIVERIES.filter(d=>d.delivered_at&&d.delivered_at.startsWith(hoje)&&d.status==='ativa');
+  const semEstoque=U_STOCK.filter(s=>s.qty_available===0).length;
+  const abaixoMin=U_STOCK.filter(s=>s.qty_available>0&&s.qty_available<=s.qty_minimum).length;
+  const pedPend=U_ORDERS.filter(o=>['pedido_realizado','aguardando_recebimento','recebido_parcial','em_atraso'].includes(o.status)).length;
+  const solAguard=U_REQUESTS.filter(r=>r.status==='pendente').length;
+  const valorMes=mesAtual.reduce((s,d)=>{
+    const items=d.unif_delivery_items||[];
+    // valor por peça não disponível diretamente, omitir (seria necessário join com pedidos)
+    return s;
+  },0);
+
+  const byPlant={};
+  for(const s of U_STOCK){const n=uPlant(s.plant_id);byPlant[n]=(byPlant[n]||0)+s.qty_available;}
+  const byItem={};
+  for(const s of U_STOCK){const n=uItem(s.item_id);byItem[n]=(byItem[n]||0)+s.qty_available;}
+
+  const criticos=U_STOCK.filter(s=>s.qty_available<=s.qty_minimum).sort((a,b)=>a.qty_available-b.qty_available).slice(0,10);
+
+  V.innerHTML=`<h2 class="page">Uniformes — Visão geral</h2>
+    <p class="sub">Painel executivo de estoque e movimentações. <b>Clique nos cards</b> para navegar.</p>
+    <div class="grid">
+      ${kpi('A repor',semEstoque+abaixoMin,'itens com estoque crítico','alert','u_estoque')}
+      ${kpi('Entregas no mês',mesAtual.length,'entregas realizadas','good','u_entregas')}
+      ${kpi('Pedidos pendentes',pedPend,'aguardando recebimento','warn','u_compras')}
+      ${kpi('Solicitações',solAguard,'aguardando aprovação','pur','u_solicitacoes')}
+    </div>
+    <div class="row2" style="margin-top:18px">
+      <section class="block"><h3>Estoque por planta</h3>${bars(byPlant,null)}</section>
+      <section class="block"><h3>Estoque por item</h3>${bars(byItem,null)}</section>
+    </div>
+    <section class="block"><h3>Itens críticos <small>— estoque abaixo ou igual ao mínimo</small></h3>
+      ${criticos.length===0?'<p class="muted">Nenhum item crítico.</p>':
+      `<table><thead><tr><th>Planta</th><th>Item</th><th>Tamanho</th><th>Disponível</th><th>Mínimo</th><th>Situação</th></tr></thead>
+      <tbody>${criticos.map(s=>{const st=uStockSt(s.qty_available,s.qty_minimum);return`<tr>
+        <td>${uPlant(s.plant_id)}</td><td>${uItem(s.item_id)}</td><td>${uSize(s.size_id)}</td>
+        <td><b style="color:var(--vermelho)">${s.qty_available}</b></td><td>${s.qty_minimum}</td>
+        <td><span class="pill ${st.c}">${st.l}</span></td></tr>`;}).join('')}
+      </tbody></table>`}
+    </section>`;
+  V.querySelectorAll('[data-f]').forEach(el=>el.onclick=()=>{UTAB=el.dataset.f;renderApp();});
+}
+
+// ── ESTOQUE ───────────────────────────────────────────────────
+function uEstoque(){
+  const V=document.getElementById('view');
+  const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
+
+  const renderTable=()=>{
+    const fp=val('ufp'),fi=val('ufi'),fs=val('ufs'),fst=val('ufst');
+    const rows=U_STOCK.filter(s=>
+      (!fp||s.plant_id===fp)&&(!fi||s.item_id===fi)&&(!fs||s.size_id===fs)
+    ).map(s=>{
+      const st=uStockSt(s.qty_available,s.qty_minimum);
+      if(fst&&fst!==st.l)return null;
+      return`<tr>
+        <td>${uPlant(s.plant_id)}</td><td>${uItem(s.item_id)}</td><td>${uSize(s.size_id)}</td>
+        <td><b>${s.qty_available}</b></td><td>${s.qty_minimum}</td>
+        <td><span class="pill ${st.c}">${st.l}</span></td>
+        <td style="font-size:12px;color:var(--muted)">${s.last_movement_at?uDate(s.last_movement_at.slice(0,10)):'—'}</td>
+      </tr>`;
+    }).filter(Boolean);
+    document.getElementById('utb').innerHTML=rows.length?rows.join(''):`<tr><td colspan="7" style="text-align:center;padding:24px" class="muted">Nenhum registro encontrado.</td></tr>`;
+    document.getElementById('ucnt').textContent=`${rows.length} registro(s)`;
+  };
+
+  V.innerHTML=`<h2 class="page">Estoque</h2>
+    <p class="sub">Saldo atual por planta, item e tamanho. Toda movimentação é rastreável.</p>
+    <section class="block">
+      <div class="filters">
+        <select id="ufp"><option value="">Todas as plantas</option>${plantOpts}</select>
+        <select id="ufi"><option value="">Todos os itens</option>${itemOpts}</select>
+        <select id="ufs"><option value="">Todos os tamanhos</option>${sizeOpts}</select>
+        <select id="ufst"><option value="">Toda situação</option>
+          <option>Regular</option><option>Atenção</option><option>Reposição necessária</option><option>Sem estoque</option>
+        </select>
+      </div>
+      <table><thead><tr><th>Planta</th><th>Item</th><th>Tamanho</th><th>Disponível</th><th>Mínimo</th><th>Situação</th><th>Última mov.</th></tr></thead>
+      <tbody id="utb"></tbody></table>
+      <p class="note" id="ucnt"></p>
+    </section>`;
+  ['ufp','ufi','ufs','ufst'].forEach(id=>document.getElementById(id).addEventListener('change',renderTable));
+  renderTable();
+}
+
+// ── ENTREGAS ──────────────────────────────────────────────────
+function uEntregas(){
+  const V=document.getElementById('view');
+  const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
+  const reasonOpts=Object.entries(U_REASON_LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+
+  // Tabela histórico
+  const hiRows=U_DELIVERIES.slice(0,100).map(d=>{
+    const its=d.unif_delivery_items||[];
+    const resumo=its.map(i=>`${uItem(i.item_id)} ${uSize(i.size_id)} ×${i.qty}`).join(', ');
+    return`<tr data-del="${d.id}">
+      <td>${esc(d.protocol)}</td><td>${esc(d.employee_name)}</td><td>${uPlant(d.plant_id)}</td>
+      <td style="font-size:12px">${resumo||'—'}</td>
+      <td>${uDate(d.delivered_at?d.delivered_at.slice(0,10):'')}</td>
+      <td>${U_REASON_LABELS[d.reason]||d.reason}</td>
+      <td><span class="pill ${d.status==='ativa'?'c-grn':'c-gry'}">${d.status==='ativa'?'Ativa':'Cancelada'}</span></td>
+    </tr>`;
+  }).join('');
+
+  V.innerHTML=`<h2 class="page">Entregas de Uniforme</h2>
+    <p class="sub">Registro de retirada de uniforme por colaborador. O estoque é atualizado automaticamente.</p>
+    <section class="block">
+      <h3>Nova entrega</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="fl">Planta</label><select id="udp" class="finp"><option value="">Selecione…</option>${plantOpts}</select></div>
+        <div><label class="fl">Colaborador</label><input id="udname" class="finp" placeholder="Nome completo"/></div>
+        <div><label class="fl">Setor</label><input id="uddept" class="finp" placeholder="Departamento"/></div>
+        <div><label class="fl">Responsável pela entrega</label><input id="udresp" class="finp" placeholder="Nome de quem entregou"/></div>
+        <div><label class="fl">Motivo</label><select id="udreason" class="finp"><option value="">Selecione…</option>${reasonOpts}</select></div>
+        <div><label class="fl">Observações</label><input id="udobs" class="finp" placeholder="Opcional"/></div>
+      </div>
+      <div id="ud-items" style="margin-top:16px">
+        <b style="font-size:13px">Itens da entrega:</b>
+        <div id="ud-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
+        <button class="btn g" id="ud-add" style="margin-top:10px">+ Adicionar item</button>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn" id="ud-save">Confirmar entrega</button>
+        <span class="muted" id="ud-msg" style="line-height:2.2"></span>
+      </div>
+    </section>
+    <section class="block" style="margin-top:18px">
+      <h3>Histórico de entregas</h3>
+      <table><thead><tr><th>Protocolo</th><th>Colaborador</th><th>Planta</th><th>Itens</th><th>Data</th><th>Motivo</th><th>Status</th></tr></thead>
+      <tbody>${hiRows||'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Nenhuma entrega registrada.</td></tr>'}</tbody></table>
+    </section>`;
+
+  // Estilo inline para labels/inputs no form
+  V.querySelectorAll('.fl').forEach(l=>{l.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';});
+  V.querySelectorAll('.finp').forEach(i=>{i.style.cssText='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+
+  let lineCount=0;
+  const addLine=()=>{
+    lineCount++;
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;gap:8px;align-items:center';
+    d.innerHTML=`<select class="finp udi" data-f="item" style="flex:1"><option value="">Item…</option>${itemOpts}</select>
+      <select class="finp udi" data-f="size" style="width:90px"><option value="">Tam…</option>${sizeOpts}</select>
+      <input class="finp udi" data-f="qty" type="number" min="1" value="1" style="width:70px"/>
+      <span id="ud-avail-${lineCount}" style="font-size:12px;color:var(--muted);white-space:nowrap;width:80px"></span>
+      <button style="background:none;border:none;color:var(--vermelho);font-size:18px;cursor:pointer" title="Remover">×</button>`;
+    d.querySelector('button').onclick=()=>d.remove();
+    const upd=async()=>{
+      const itId=d.querySelector('[data-f=item]').value;
+      const szId=d.querySelector('[data-f=size]').value;
+      const plId=val('udp');
+      const sp=document.getElementById(`ud-avail-${lineCount}`);
+      if(itId&&szId&&plId){
+        const s=U_STOCK.find(x=>x.plant_id===plId&&x.item_id===itId&&x.size_id===szId);
+        sp.textContent=s?`Disponível: ${s.qty_available}`:'Sem saldo';
+        sp.style.color=s&&s.qty_available>0?'var(--verde)':'var(--vermelho)';
+      }
+    };
+    d.querySelectorAll('select').forEach(s=>s.onchange=upd);
+    document.getElementById('ud-lines').appendChild(d);
+    d.querySelectorAll('.finp').forEach(i=>{i.style.borderColor='var(--linha)';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  };
+  document.getElementById('ud-add').onclick=addLine;
+  document.getElementById('udp').onchange=()=>document.querySelectorAll('[id^=ud-avail-]').forEach(e=>e.textContent='');
+  addLine();
+
+  document.getElementById('ud-save').onclick=async()=>{
+    const msg=document.getElementById('ud-msg');
+    const plant=val('udp'),name=val('udname').trim(),dept=val('uddept').trim(),resp=val('udresp').trim(),reason=val('udreason');
+    if(!plant||!name||!resp||!reason){msg.style.color='var(--vermelho)';msg.textContent='Preencha todos os campos obrigatórios.';return;}
+    const items=[];
+    document.querySelectorAll('#ud-lines > div').forEach(d=>{
+      const it=d.querySelector('[data-f=item]').value;
+      const sz=d.querySelector('[data-f=size]').value;
+      const q=parseInt(d.querySelector('[data-f=qty]').value)||0;
+      if(it&&sz&&q>0)items.push({item_id:it,size_id:sz,qty:q});
+    });
+    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Adicione pelo menos um item.';return;}
+    msg.style.color='var(--muted)';msg.textContent='Registrando…';
+    const{data,error}=await sb.rpc('registrar_entrega',{
+      p_plant_id:plant,p_employee_id:null,p_employee_name:name,p_employee_dept:dept,
+      p_reason:reason,p_responsible:resp,p_obs:val('udobs')||null,
+      p_items:items,p_user_id:USER.id
+    });
+    if(error){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+error.message;return;}
+    await loadUniData();
+    showToast(`Entrega registrada — Protocolo ${data.protocol}`);
+    UTAB='u_entregas';renderApp();
+  };
+
+  // Drawer cancelamento
+  V.querySelectorAll('tr[data-del]').forEach(tr=>tr.style.cursor='pointer');
+  V.querySelectorAll('tr[data-del]').forEach(tr=>tr.onclick=()=>openDeliveryDrawer(tr.dataset.del));
+}
+
+function openDeliveryDrawer(id){
+  const d=U_DELIVERIES.find(x=>x.id===id);if(!d)return;
+  const its=(d.unif_delivery_items||[]).map(i=>`<div class="kv"><span>${uItem(i.item_id)} ${uSize(i.size_id)}</span><b>${i.qty} un</b></div>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">Entrega ${esc(d.protocol)}</h3><button class="btn g" id="fx">Fechar</button></div>
+    <div class="kv"><span>Colaborador</span><b>${esc(d.employee_name)}</b></div>
+    <div class="kv"><span>Planta</span><b>${uPlant(d.plant_id)}</b></div>
+    <div class="kv"><span>Setor</span><b>${d.employee_dept||'—'}</b></div>
+    <div class="kv"><span>Data</span><b>${uDate(d.delivered_at?d.delivered_at.slice(0,10):'')}</b></div>
+    <div class="kv"><span>Motivo</span><b>${U_REASON_LABELS[d.reason]||d.reason}</b></div>
+    <div class="kv"><span>Responsável</span><b>${esc(d.responsible)}</b></div>
+    <div class="kv"><span>Status</span><span class="pill ${d.status==='ativa'?'c-grn':'c-gry'}">${d.status==='ativa'?'Ativa':'Cancelada'}</span></div>
+    <div style="margin-top:12px"><b>Itens:</b>${its}</div>
+    ${d.status==='ativa'?`<div style="margin-top:20px;border-top:1px solid var(--linha);padding-top:16px">
+      <b style="font-size:13px">Cancelar entrega</b>
+      <textarea id="cr" placeholder="Motivo do cancelamento (obrigatório)" style="margin-top:8px"></textarea>
+      <button class="btn" style="background:var(--vermelho);margin-top:8px" id="btn-cancel">Cancelar entrega</button>
+    </div>`:''}
+  </div></div>`);
+  const ov=document.getElementById('ov');
+  ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();};
+  document.getElementById('fx').onclick=()=>ov.remove();
+  if(d.status==='ativa'){
+    document.getElementById('btn-cancel').onclick=async()=>{
+      const r=document.getElementById('cr').value.trim();
+      if(!r){alert('Informe o motivo do cancelamento.');return;}
+      const{error}=await sb.rpc('cancelar_entrega',{p_delivery_id:d.id,p_reason:r,p_user_id:USER.id});
+      if(error){alert('Erro: '+error.message);return;}
+      ov.remove();await loadUniData();showToast('Entrega cancelada — estoque revertido.');renderApp();
+    };
+  }
+}
+
+// ── SOLICITAÇÕES ──────────────────────────────────────────────
+function uSolicitacoes(){
+  const V=document.getElementById('view');
+  const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
+  const reasonOpts=Object.entries(U_REASON_LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+
+  const drawList=()=>{
+    const fst=val('uqst');
+    const rows=U_REQUESTS.filter(r=>!fst||r.status===fst).map(r=>{
+      const s=U_REQ_STATUS[r.status]||{l:r.status,c:'c-gry'};
+      const its=(r.unif_request_items||[]).map(i=>`${uItem(i.item_id)} ${uSize(i.size_id)}×${i.qty}`).join(', ');
+      return`<tr data-req="${r.id}"><td>${esc(r.employee_name)}</td><td>${uPlant(r.plant_id)}</td>
+        <td>${r.employee_dept||'—'}</td><td style="font-size:12px">${its||'—'}</td>
+        <td>${uDate(r.created_at?r.created_at.slice(0,10):'')}</td>
+        <td><span class="pill ${s.c}">${s.l}</span></td></tr>`;
+    }).join('');
+    document.getElementById('uqtb').innerHTML=rows||`<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nenhuma solicitação.</td></tr>`;
+    document.querySelectorAll('#uqtb tr[data-req]').forEach(tr=>tr.onclick=()=>openReqDrawer(tr.dataset.req));
+  };
+
+  V.innerHTML=`<h2 class="page">Solicitações</h2>
+    <p class="sub">Gestores solicitam, RH analisa e aprova. Clique numa solicitação para revisar.</p>
+    <section class="block">
+      <h3>Nova solicitação</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="fl">Planta</label><select id="uqp" class="finp"><option value="">Selecione…</option>${plantOpts}</select></div>
+        <div><label class="fl">Colaborador</label><input id="uqname" class="finp" placeholder="Nome do colaborador"/></div>
+        <div><label class="fl">Setor</label><input id="uqdept" class="finp" placeholder="Departamento"/></div>
+        <div><label class="fl">Observação</label><input id="uqobs" class="finp" placeholder="Opcional"/></div>
+      </div>
+      <div style="margin-top:12px"><b style="font-size:13px">Itens:</b>
+        <div id="uq-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
+        <button class="btn g" id="uq-add" style="margin-top:10px">+ Adicionar item</button>
+      </div>
+      <button class="btn" id="uq-save" style="margin-top:16px">Enviar solicitação</button>
+      <span class="muted" id="uq-msg" style="margin-left:12px"></span>
+    </section>
+    <section class="block" style="margin-top:18px">
+      <h3>Solicitações recentes</h3>
+      <div class="filters"><select id="uqst"><option value="">Todos os status</option>
+        ${Object.entries(U_REQ_STATUS).map(([k,v])=>`<option value="${k}">${v.l}</option>`).join('')}
+      </select></div>
+      <table><thead><tr><th>Colaborador</th><th>Planta</th><th>Setor</th><th>Itens</th><th>Data</th><th>Status</th></tr></thead>
+      <tbody id="uqtb"></tbody></table>
+    </section>`;
+
+  V.querySelectorAll('.fl').forEach(l=>{l.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';});
+  V.querySelectorAll('.finp').forEach(i=>{i.style.cssText='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none';});
+  document.getElementById('uqst').onchange=drawList;
+  drawList();
+
+  const addLine=()=>{
+    const d=document.createElement('div');d.style.cssText='display:flex;gap:8px;align-items:center';
+    d.innerHTML=`<select class="finp" style="flex:1"><option value="">Item…</option>${itemOpts}</select>
+      <select class="finp" style="width:90px"><option value="">Tam…</option>${sizeOpts}</select>
+      <input class="finp" type="number" min="1" value="1" style="width:70px"/>
+      <select class="finp" style="flex:1"><option value="">Motivo…</option>${reasonOpts}</select>
+      <button style="background:none;border:none;color:var(--vermelho);font-size:18px;cursor:pointer">×</button>`;
+    d.querySelector('button').onclick=()=>d.remove();
+    document.getElementById('uq-lines').appendChild(d);
+    d.querySelectorAll('.finp').forEach(i=>{i.style.borderColor='var(--linha)';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  };
+  document.getElementById('uq-add').onclick=addLine;
+  addLine();
+
+  document.getElementById('uq-save').onclick=async()=>{
+    const msg=document.getElementById('uq-msg');
+    const plant=val('uqp'),name=val('uqname').trim(),dept=val('uqdept').trim();
+    if(!plant||!name){msg.style.color='var(--vermelho)';msg.textContent='Planta e colaborador são obrigatórios.';return;}
+    const items=[];
+    document.querySelectorAll('#uq-lines > div').forEach(d=>{
+      const sels=[...d.querySelectorAll('select')];const inp=d.querySelector('input');
+      const it=sels[0].value,sz=sels[1].value,q=parseInt(inp.value)||0,r=sels[2].value;
+      if(it&&sz&&q>0)items.push({item_id:it,size_id:sz,qty:q,reason:r||null});
+    });
+    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Adicione pelo menos um item.';return;}
+    msg.style.color='var(--muted)';msg.textContent='Enviando…';
+    const{data:req,error:re}=await sb.from('unif_requests').insert({
+      plant_id:plant,employee_name:name,employee_dept:dept,obs:val('uqobs')||null,
+      requester_id:USER.id,requester_name:USER.email,status:'pendente'
+    }).select('id').single();
+    if(re){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+re.message;return;}
+    await sb.from('unif_request_items').insert(items.map(i=>({...i,request_id:req.id})));
+    await loadUniData();showToast('Solicitação enviada com sucesso.');UTAB='u_solicitacoes';renderApp();
+  };
+}
+
+function openReqDrawer(id){
+  const r=U_REQUESTS.find(x=>x.id===id);if(!r)return;
+  const s=U_REQ_STATUS[r.status]||{l:r.status,c:'c-gry'};
+  const its=(r.unif_request_items||[]).map(i=>`<div class="kv"><span>${uItem(i.item_id)} ${uSize(i.size_id)}</span><b>${i.qty} un</b></div>`).join('');
+  const canReview=ROLE==='owner'||ROLE==='supervisor_dp';
+  const reviewBtns=canReview&&r.status==='pendente'?`<div style="margin-top:20px;border-top:1px solid var(--linha);padding-top:16px">
+    <b>Parecer do RH:</b>
+    <textarea id="rn" placeholder="Justificativa (opcional)" style="margin-top:8px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" id="btn-approve">Aprovar</button>
+      <button class="btn" style="background:var(--vermelho)" id="btn-refuse">Recusar</button>
+    </div></div>`:'';
+  document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">Solicitação</h3><button class="btn g" id="fx">Fechar</button></div>
+    <div class="kv"><span>Colaborador</span><b>${esc(r.employee_name)}</b></div>
+    <div class="kv"><span>Planta</span><b>${uPlant(r.plant_id)}</b></div>
+    <div class="kv"><span>Setor</span><b>${r.employee_dept||'—'}</b></div>
+    <div class="kv"><span>Solicitante</span><b>${r.requester_name||'—'}</b></div>
+    <div class="kv"><span>Data</span><b>${uDate(r.created_at?r.created_at.slice(0,10):'')}</b></div>
+    <div class="kv"><span>Status</span><span class="pill ${s.c}">${s.l}</span></div>
+    ${r.review_note?`<div class="expl"><b>Parecer:</b> ${esc(r.review_note)}</div>`:''}
+    <div style="margin-top:12px"><b>Itens solicitados:</b>${its}</div>
+    ${reviewBtns}
+  </div></div>`);
+  const ov=document.getElementById('ov');
+  ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();};
+  document.getElementById('fx').onclick=()=>ov.remove();
+  if(canReview&&r.status==='pendente'){
+    const upd=async(st)=>{
+      const note=document.getElementById('rn').value.trim()||null;
+      await sb.from('unif_requests').update({status:st,review_note:note,reviewed_by:USER.id,reviewed_at:new Date().toISOString()}).eq('id',r.id);
+      ov.remove();await loadUniData();showToast(st==='aprovada'?'Solicitação aprovada.':'Solicitação recusada.');renderApp();
+    };
+    document.getElementById('btn-approve').onclick=()=>upd('aprovada');
+    document.getElementById('btn-refuse').onclick=()=>upd('recusada');
+  }
+}
+
+// ── COMPRAS E RECEBIMENTOS ────────────────────────────────────
+function uCompras(){
+  const V=document.getElementById('view');
+  const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const itemOpts=U_ITEMS.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('');
+  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
+
+  const drawList=()=>{
+    const fst=val('ucst'),fp=val('ucfp');
+    const rows=U_ORDERS.filter(o=>(!fst||o.status===fst)&&(!fp||o.plant_id===fp)).map(o=>{
+      const s=U_PO_STATUS[o.status]||{l:o.status,c:'c-gry'};
+      const total=(o.unif_purchase_order_items||[]).reduce((s,i)=>s+i.qty_ordered,0);
+      return`<tr data-po="${o.id}"><td>${esc(o.po_number||'—')}</td><td>${uPlant(o.plant_id)}</td>
+        <td>${uDate(o.order_date)}</td><td>${uDate(o.expected_date)}</td>
+        <td>${total} peças</td><td>${o.total_value?uBRL(o.total_value):'—'}</td>
+        <td><span class="pill ${s.c}">${s.l}</span></td></tr>`;
+    }).join('');
+    document.getElementById('uctb').innerHTML=rows||`<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Nenhum pedido.</td></tr>`;
+    document.querySelectorAll('#uctb tr[data-po]').forEach(tr=>tr.onclick=()=>openPoDrawer(tr.dataset.po));
+  };
+
+  V.innerHTML=`<h2 class="page">Compras e Recebimentos</h2>
+    <p class="sub">Gerencie pedidos de compra. O estoque só é atualizado após confirmar o recebimento.</p>
+    <section class="block">
+      <h3>Novo pedido de compra</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div><label class="fl">Planta</label><select id="ucp" class="finp"><option value="">Selecione…</option>${plantOpts}</select></div>
+        <div><label class="fl">Pedido / NF</label><input id="ucpo" class="finp" placeholder="Nº do pedido"/></div>
+        <div><label class="fl">Data do pedido</label><input id="ucodate" class="finp" type="date"/></div>
+        <div><label class="fl">Prazo de entrega</label><input id="ucedate" class="finp" type="date"/></div>
+        <div><label class="fl">Valor total (R$)</label><input id="ucval" class="finp" type="number" step="0.01" placeholder="0,00"/></div>
+        <div><label class="fl">Observações</label><input id="ucobs" class="finp" placeholder="Opcional"/></div>
+      </div>
+      <div style="margin-top:12px"><b style="font-size:13px">Itens do pedido:</b>
+        <div id="uc-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
+        <button class="btn g" id="uc-add" style="margin-top:10px">+ Adicionar item</button>
+      </div>
+      <button class="btn" id="uc-save" style="margin-top:16px">Registrar pedido</button>
+      <span class="muted" id="uc-msg" style="margin-left:12px"></span>
+    </section>
+    <section class="block" style="margin-top:18px">
+      <h3>Pedidos em aberto</h3>
+      <div class="filters">
+        <select id="ucfp"><option value="">Todas as plantas</option>${plantOpts}</select>
+        <select id="ucst"><option value="">Todos os status</option>
+          ${Object.entries(U_PO_STATUS).map(([k,v])=>`<option value="${k}">${v.l}</option>`).join('')}
+        </select>
+      </div>
+      <table><thead><tr><th>Pedido/NF</th><th>Planta</th><th>Data pedido</th><th>Prazo</th><th>Total</th><th>Valor</th><th>Status</th></tr></thead>
+      <tbody id="uctb"></tbody></table>
+    </section>`;
+
+  V.querySelectorAll('.fl').forEach(l=>{l.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';});
+  V.querySelectorAll('.finp').forEach(i=>{i.style.cssText='width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  ['ucst','ucfp'].forEach(id=>document.getElementById(id).addEventListener('change',drawList));
+  drawList();
+
+  const addLine=()=>{
+    const d=document.createElement('div');d.style.cssText='display:flex;gap:8px;align-items:center';
+    d.innerHTML=`<select class="finp" style="flex:1"><option value="">Item…</option>${itemOpts}</select>
+      <select class="finp" style="width:90px"><option value="">Tam…</option>${sizeOpts}</select>
+      <input class="finp" type="number" min="1" value="1" placeholder="Qtd" style="width:80px"/>
+      <input class="finp" type="number" step="0.01" placeholder="R$ unit." style="width:100px"/>
+      <button style="background:none;border:none;color:var(--vermelho);font-size:18px;cursor:pointer">×</button>`;
+    d.querySelector('button').onclick=()=>d.remove();
+    document.getElementById('uc-lines').appendChild(d);
+    d.querySelectorAll('.finp').forEach(i=>{i.style.borderColor='var(--linha)';i.onfocus=()=>i.style.borderColor='var(--azul)';i.onblur=()=>i.style.borderColor='var(--linha)';});
+  };
+  document.getElementById('uc-add').onclick=addLine;
+  addLine();
+
+  document.getElementById('uc-save').onclick=async()=>{
+    const msg=document.getElementById('uc-msg');
+    const plant=val('ucp');
+    if(!plant){msg.style.color='var(--vermelho)';msg.textContent='Selecione a planta.';return;}
+    const items=[];
+    document.querySelectorAll('#uc-lines > div').forEach(d=>{
+      const sels=[...d.querySelectorAll('select')],inps=[...d.querySelectorAll('input')];
+      const it=sels[0].value,sz=sels[1].value,q=parseInt(inps[0].value)||0,uv=parseFloat(inps[1].value)||null;
+      if(it&&sz&&q>0)items.push({item_id:it,size_id:sz,qty_ordered:q,unit_value:uv});
+    });
+    if(!items.length){msg.style.color='var(--vermelho)';msg.textContent='Adicione ao menos um item.';return;}
+    msg.style.color='var(--muted)';msg.textContent='Registrando…';
+    const{data:po,error:pe}=await sb.from('unif_purchase_orders').insert({
+      plant_id:plant,po_number:val('ucpo')||null,order_date:val('ucodate')||null,
+      expected_date:val('ucedate')||null,total_value:parseFloat(val('ucval'))||null,
+      obs:val('ucobs')||null,status:'pedido_realizado',created_by:USER.id
+    }).select('id').single();
+    if(pe){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+pe.message;return;}
+    await sb.from('unif_purchase_order_items').insert(items.map(i=>({...i,order_id:po.id})));
+    await loadUniData();showToast('Pedido registrado. Confirme o recebimento quando chegar.');UTAB='u_compras';renderApp();
+  };
+}
+
+function openPoDrawer(id){
+  const o=U_ORDERS.find(x=>x.id===id);if(!o)return;
+  const s=U_PO_STATUS[o.status]||{l:o.status,c:'c-gry'};
+  const canReceive=ROLE==='owner'||ROLE==='supervisor_dp';
+  const its=(o.unif_purchase_order_items||[]).map(i=>`<div class="kv">
+    <span>${uItem(i.item_id)} ${uSize(i.size_id)}</span>
+    <b>${i.qty_ordered} pedido / ${i.qty_received} recebido</b></div>`).join('');
+  const sizeOpts=U_SIZES.map(s=>`<option value="${s.id}">${esc(s.code)}</option>`).join('');
+  const receiveSection=canReceive&&['pedido_realizado','aguardando_recebimento','recebido_parcial','em_atraso'].includes(o.status)?`
+    <div style="margin-top:20px;border-top:1px solid var(--linha);padding-top:16px">
+      <b>Confirmar recebimento</b>
+      <input id="rec-nf" class="finp" placeholder="NF (opcional)" style="margin-top:8px;width:100%;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none"/>
+      <div id="rec-lines" style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+        ${(o.unif_purchase_order_items||[]).map(i=>`<div style="display:flex;gap:8px;align-items:center">
+          <span style="flex:1;font-size:13px">${uItem(i.item_id)} ${uSize(i.size_id)}</span>
+          <input class="rec-qty" data-it="${i.item_id}" data-sz="${i.size_id}" type="number" min="0" value="${i.qty_ordered-i.qty_received}" style="width:80px;padding:8px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;outline:none"/>
+          <span style="font-size:12px;color:var(--muted)">un</span>
+        </div>`).join('')}
+      </div>
+      <button class="btn" id="btn-receive" style="margin-top:12px">Confirmar recebimento</button>
+    </div>`:'';
+  document.body.insertAdjacentHTML('beforeend',`<div id="ov"><div id="dr">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">Pedido ${esc(o.po_number||'—')}</h3><button class="btn g" id="fx">Fechar</button></div>
+    <div class="kv"><span>Planta</span><b>${uPlant(o.plant_id)}</b></div>
+    <div class="kv"><span>Data do pedido</span><b>${uDate(o.order_date)}</b></div>
+    <div class="kv"><span>Prazo</span><b>${uDate(o.expected_date)}</b></div>
+    <div class="kv"><span>Valor total</span><b>${o.total_value?uBRL(o.total_value):'—'}</b></div>
+    <div class="kv"><span>Status</span><span class="pill ${s.c}">${s.l}</span></div>
+    ${o.obs?`<div class="expl">${esc(o.obs)}</div>`:''}
+    <div style="margin-top:12px"><b>Itens:</b>${its}</div>
+    ${receiveSection}
+  </div></div>`);
+  const ov=document.getElementById('ov');
+  ov.onclick=ev=>{if(ev.target.id==='ov')ov.remove();};
+  document.getElementById('fx').onclick=()=>ov.remove();
+  if(document.getElementById('btn-receive')){
+    document.getElementById('btn-receive').onclick=async()=>{
+      const items=[];
+      document.querySelectorAll('.rec-qty').forEach(inp=>{
+        const q=parseInt(inp.value)||0;
+        if(q>0)items.push({item_id:inp.dataset.it,size_id:inp.dataset.sz,qty_received:q});
+      });
+      if(!items.length){alert('Informe as quantidades recebidas.');return;}
+      const{error}=await sb.rpc('confirmar_recebimento',{
+        p_order_id:o.id,p_nf_number:document.getElementById('rec-nf').value||null,
+        p_obs:null,p_items:items,p_user_id:USER.id
+      });
+      if(error){alert('Erro: '+error.message);return;}
+      ov.remove();await loadUniData();showToast('Recebimento confirmado — estoque atualizado.');renderApp();
+    };
+  }
+}
+
+// ── INVENTÁRIO ────────────────────────────────────────────────
+function uInventario(){
+  const V=document.getElementById('view');
+  const plantOpts=U_PLANTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const ADJUST_REASONS=['Contagem física','Perda','Avaria','Devolução não registrada','Erro de lançamento','Transferência não registrada','Outro'];
+
+  V.innerHTML=`<h2 class="page">Inventário</h2>
+    <p class="sub">Conferência física de estoque. Toda diferença gera ajuste rastreável com justificativa obrigatória.</p>
+    <section class="block">
+      <h3>Iniciar inventário</h3>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div><label class="fl">Planta</label><select id="uip" class="finp" style="padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit;min-width:180px"><option value="">Selecione…</option>${plantOpts}</select></div>
+        <button class="btn" id="ui-start">Iniciar contagem</button>
+      </div>
+      <div id="ui-form" style="margin-top:18px;display:none">
+        <table><thead><tr><th>Item</th><th>Tamanho</th><th>Esperado</th><th>Contagem física</th><th>Diferença</th><th>Motivo do ajuste</th></tr></thead>
+        <tbody id="ui-tb"></tbody></table>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <button class="btn" id="ui-save">Concluir inventário</button>
+          <span class="muted" id="ui-msg" style="line-height:2.2"></span>
+        </div>
+      </div>
+    </section>`;
+
+  V.querySelectorAll('.fl').forEach(l=>{l.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px';});
+
+  let invId=null;
+  document.getElementById('ui-start').onclick=async()=>{
+    const plant=document.getElementById('uip').value;
+    if(!plant){alert('Selecione a planta.');return;}
+    // Cria inventário e carrega itens de estoque
+    const{data:inv,error}=await sb.from('unif_inventory').insert({plant_id:plant,started_by:USER.id}).select('id').single();
+    if(error){alert('Erro: '+error.message);return;}
+    invId=inv.id;
+    const stockItems=U_STOCK.filter(s=>s.plant_id===plant);
+    if(!stockItems.length){alert('Nenhum item cadastrado nesta planta. Acesse Cadastros para configurar o estoque mínimo.');return;}
+    // Inserir linhas do inventário
+    const lines=stockItems.map(s=>({inventory_id:invId,item_id:s.item_id,size_id:s.size_id,qty_expected:s.qty_available}));
+    const{data:invItems,error:ie}=await sb.from('unif_inventory_items').insert(lines).select();
+    if(ie){alert('Erro ao criar linhas: '+ie.message);return;}
+    const reasonOpts=ADJUST_REASONS.map(r=>`<option>${r}</option>`).join('');
+    document.getElementById('ui-tb').innerHTML=invItems.map(i=>`<tr data-iid="${i.id}">
+      <td>${uItem(i.item_id)}</td><td>${uSize(i.size_id)}</td>
+      <td>${i.qty_expected}</td>
+      <td><input type="number" min="0" value="${i.qty_expected}" class="icount" style="width:70px;padding:7px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;text-align:center"/></td>
+      <td class="idiff" style="font-weight:700">0</td>
+      <td><select class="ireason" style="padding:7px 10px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:12px;font-family:inherit"><option value="">Sem ajuste</option>${reasonOpts}</select></td>
+    </tr>`).join('');
+    document.querySelectorAll('.icount').forEach(inp=>{
+      inp.oninput=()=>{
+        const tr=inp.closest('tr');const exp=parseInt(tr.querySelector('td:nth-child(3)').textContent);
+        const cnt=parseInt(inp.value)||0;const diff=cnt-exp;
+        const dc=tr.querySelector('.idiff');dc.textContent=diff===0?'0':(diff>0?'+':'')+diff;
+        dc.style.color=diff===0?'var(--ink)':diff>0?'var(--verde)':'var(--vermelho)';
+      };
+    });
+    document.getElementById('ui-form').style.display='block';
+  };
+
+  document.getElementById('ui-save').onclick=async()=>{
+    if(!invId)return;
+    const msg=document.getElementById('ui-msg');
+    const items=[];
+    document.querySelectorAll('#ui-tb tr[data-iid]').forEach(tr=>{
+      items.push({
+        inventory_item_id:tr.dataset.iid,
+        qty_counted:parseInt(tr.querySelector('.icount').value)||0,
+        adjust_reason:tr.querySelector('.ireason').value||null
+      });
+    });
+    msg.style.color='var(--muted)';msg.textContent='Concluindo…';
+    const{error}=await sb.rpc('concluir_inventario',{p_inventory_id:invId,p_items:items,p_user_id:USER.id});
+    if(error){msg.style.color='var(--vermelho)';msg.textContent='Erro: '+error.message;return;}
+    await loadUniData();showToast('Inventário concluído — estoque ajustado.');UTAB='u_estoque';renderApp();
+  };
+}
+
+// ── AUDITORIA ─────────────────────────────────────────────────
+function uAudit(){
+  const V=document.getElementById('view');
+  const ACTION_LABELS={entrega_registrada:'Entrega registrada',entrega_cancelada:'Entrega cancelada',recebimento_confirmado:'Recebimento confirmado',inventario_concluido:'Inventário concluído'};
+  const rows=U_AUDIT.slice(0,200).map(a=>`<tr>
+    <td style="font-size:12px">${a.created_at?new Date(a.created_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—'}</td>
+    <td>${ACTION_LABELS[a.action]||a.action}</td>
+    <td>${a.entity}</td>
+    <td style="font-size:12px;color:var(--muted)">${a.plant_id?uPlant(a.plant_id):'—'}</td>
+    <td style="font-size:11px;max-width:200px;word-break:break-word">${a.new_value?JSON.stringify(a.new_value).slice(0,80):'—'}</td>
+  </tr>`).join('');
+  V.innerHTML=`<h2 class="page">Auditoria — Uniformes</h2>
+    <p class="sub">Registro completo de operações. Visível apenas para o owner.</p>
+    <section class="block">
+      <table><thead><tr><th>Data/hora</th><th>Ação</th><th>Entidade</th><th>Planta</th><th>Dados</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nenhum evento registrado.</td></tr>'}</tbody></table>
+    </section>`;
+}
+
+// ── CADASTROS ─────────────────────────────────────────────────
+function uCadastros(){
+  const V=document.getElementById('view');
+  let cadastroTab='plantas';
+  const render=()=>{
+    const tabs=[['plantas','Plantas'],['itens','Itens'],['tamanhos','Tamanhos'],['fornecedores','Fornecedores'],['estoq_min','Estoque mínimo']];
+    const tabNav=tabs.map(([k,l])=>`<button class="btn ${cadastroTab===k?'':'g'}" data-ct="${k}" style="font-size:12px;padding:7px 14px">${l}</button>`).join('');
+    let content='';
+    if(cadastroTab==='plantas'){
+      const rows=U_PLANTS.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.code)}</td><td><span class="pill ${p.active?'c-grn':'c-gry'}">${p.active?'Ativo':'Inativo'}</span></td></tr>`).join('');
+      content=`<table><thead><tr><th>Nome</th><th>Código</th><th>Status</th></tr></thead><tbody>${rows||noData(3)}</tbody></table>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <input id="pname" class="finp" placeholder="Nome da planta" style="padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <input id="pcode" class="finp" placeholder="Código (ex: ACO)" style="width:120px;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <button class="btn" id="padd">Adicionar</button>
+        </div>`;
+    } else if(cadastroTab==='itens'){
+      const rows=U_ITEMS.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.description||'—')}</td><td><span class="pill ${i.active?'c-grn':'c-gry'}">${i.active?'Ativo':'Inativo'}</span></td></tr>`).join('');
+      content=`<table><thead><tr><th>Nome</th><th>Descrição</th><th>Status</th></tr></thead><tbody>${rows||noData(3)}</tbody></table>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <input id="iname" class="finp" placeholder="Nome do item (ex: Calça)" style="padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <input id="idesc" class="finp" placeholder="Descrição" style="padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <button class="btn" id="iadd">Adicionar</button>
+        </div>`;
+    } else if(cadastroTab==='tamanhos'){
+      const rows=U_SIZES.map(s=>`<tr><td>${esc(s.code)}</td><td>${s.sort_order}</td><td><span class="pill ${s.active?'c-grn':'c-gry'}">${s.active?'Ativo':'Inativo'}</span></td></tr>`).join('');
+      content=`<table><thead><tr><th>Código</th><th>Ordem</th><th>Status</th></tr></thead><tbody>${rows||noData(3)}</tbody></table>
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <input id="scode" class="finp" placeholder="Código (ex: XXG)" style="width:120px;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <input id="sord" class="finp" type="number" placeholder="Ordem" style="width:80px;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+          <button class="btn" id="sadd">Adicionar</button>
+        </div>`;
+    } else if(cadastroTab==='fornecedores'){
+      const rows=U_PLANTS.length===0?noData(3):'';
+      // Carrega fornecedores separadamente
+      content=`<p class="muted" id="supp-load">Carregando…</p>`;
+    } else if(cadastroTab==='estoq_min'){
+      const rows=U_STOCK.map(s=>`<tr>
+        <td>${uPlant(s.plant_id)}</td><td>${uItem(s.item_id)}</td><td>${uSize(s.size_id)}</td>
+        <td>${s.qty_available}</td>
+        <td><input type="number" class="em-min" data-id="${s.id}" value="${s.qty_minimum}" min="0" style="width:70px;padding:7px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;text-align:center"/></td>
+      </tr>`).join('');
+      content=`<p class="note">Altere o mínimo e clique em "Salvar mínimos".</p>
+        <table><thead><tr><th>Planta</th><th>Item</th><th>Tamanho</th><th>Disponível</th><th>Mínimo</th></tr></thead>
+        <tbody>${rows||noData(5)}</tbody></table>
+        <button class="btn" id="em-save" style="margin-top:14px">Salvar mínimos</button>`;
+    }
+
+    document.getElementById('cad-content').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${tabNav}</div>
+      <div>${content}</div>`;
+
+    document.querySelectorAll('[data-ct]').forEach(b=>b.onclick=()=>{cadastroTab=b.dataset.ct;render();});
+
+    if(cadastroTab==='plantas'){
+      document.getElementById('padd').onclick=async()=>{
+        const name=document.getElementById('pname').value.trim(),code=document.getElementById('pcode').value.trim().toUpperCase();
+        if(!name||!code){alert('Preencha nome e código.');return;}
+        const{error}=await sb.from('unif_plants').insert({name,code,created_by:USER.id});
+        if(error){alert('Erro: '+error.message);return;}
+        await loadUniData();showToast('Planta adicionada.');render();
+      };
+    } else if(cadastroTab==='itens'){
+      document.getElementById('iadd').onclick=async()=>{
+        const name=document.getElementById('iname').value.trim(),desc=document.getElementById('idesc').value.trim();
+        if(!name){alert('Informe o nome do item.');return;}
+        const{error}=await sb.from('unif_items').insert({name,description:desc||null,created_by:USER.id});
+        if(error){alert('Erro: '+error.message);return;}
+        await loadUniData();showToast('Item adicionado.');render();
+      };
+    } else if(cadastroTab==='tamanhos'){
+      document.getElementById('sadd').onclick=async()=>{
+        const code=document.getElementById('scode').value.trim().toUpperCase(),ord=parseInt(document.getElementById('sord').value)||0;
+        if(!code){alert('Informe o código do tamanho.');return;}
+        const{error}=await sb.from('unif_sizes').insert({code,name:code,sort_order:ord});
+        if(error){alert('Erro: '+error.message);return;}
+        await loadUniData();showToast('Tamanho adicionado.');render();
+      };
+    } else if(cadastroTab==='fornecedores'){
+      sb.from('unif_suppliers').select('*').order('name').then(({data})=>{
+        const rows=(data||[]).map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.cnpj||'—')}</td><td><span class="pill ${s.active?'c-grn':'c-gry'}">${s.active?'Ativo':'Inativo'}</span></td></tr>`).join('');
+        document.getElementById('supp-load').outerHTML=`<table><thead><tr><th>Nome</th><th>CNPJ</th><th>Status</th></tr></thead><tbody>${rows||noData(3)}</tbody></table>
+          <div style="margin-top:16px;display:flex;gap:8px">
+            <input id="fname" class="finp" placeholder="Nome do fornecedor" style="flex:1;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+            <input id="fcnpj" class="finp" placeholder="CNPJ (opcional)" style="width:160px;padding:10px 12px;border:1.5px solid var(--linha);border-radius:var(--r-xs);font-size:13px;font-family:inherit"/>
+            <button class="btn" id="fadd">Adicionar</button>
+          </div>`;
+        document.getElementById('fadd').onclick=async()=>{
+          const name=document.getElementById('fname').value.trim();
+          if(!name){alert('Informe o nome.');return;}
+          const{error}=await sb.from('unif_suppliers').insert({name,cnpj:document.getElementById('fcnpj').value.trim()||null,created_by:USER.id});
+          if(error){alert('Erro: '+error.message);return;}
+          showToast('Fornecedor adicionado.');render();
+        };
+      });
+    } else if(cadastroTab==='estoq_min'){
+      document.getElementById('em-save').onclick=async()=>{
+        const updates=[];
+        document.querySelectorAll('.em-min').forEach(inp=>{
+          updates.push(sb.from('unif_stock').update({qty_minimum:parseInt(inp.value)||0}).eq('id',inp.dataset.id));
+        });
+        await Promise.all(updates);
+        await loadUniData();showToast('Mínimos atualizados.');render();
+      };
+    }
+  };
+  const noData=cols=>`<tr><td colspan="${cols}" class="muted" style="text-align:center;padding:20px">Nenhum registro.</td></tr>`;
+  V.innerHTML=`<h2 class="page">Cadastros</h2>
+    <p class="sub">Manutenção de plantas, itens, tamanhos, fornecedores e mínimos de estoque.</p>
+    <section class="block"><div id="cad-content"></div></section>`;
+  render();
+}
 
 boot();
 </script>
