@@ -164,6 +164,7 @@ const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 let USER=null, ROLE='supervisor_dp', EXC=[], TAB='visao', PRESET=null, MES_VIGENTE='';
 const hmmfmt=m=>{if(!m||m===0)return'—';const h=Math.floor(Math.abs(m)/60);const mm=String(Math.abs(m)%60).padStart(2,'0');return`${h}h${mm}`;};
 let RELATORIO=null;
+let FECH_COMPANY=null; // null=grid view, string=detalhe da empresa
 let LAST_RUN=null;
 // ── Estado do módulo Uniformes ────────────────────────────────
 let MODULE='ponto'; // 'ponto' | 'uniformes'
@@ -308,7 +309,7 @@ function renderApp(){
     renderApp();
   });
   document.querySelectorAll('aside nav a').forEach(a=>a.onclick=()=>{
-    if(isPonto){TAB=a.dataset.k;PRESET=null;}else{UTAB=a.dataset.k;}
+    if(isPonto){TAB=a.dataset.k;PRESET=null;FECH_COMPANY=null;}else{UTAB=a.dataset.k;}
     renderApp();
   });
   document.getElementById('sair').onclick=async()=>{await sb.auth.signOut();location.reload();};
@@ -505,123 +506,232 @@ function openColaborador(empId){
     };
   });
 }
+// ── Fechamento Mensal por CNPJ ─────────────────────────────────────
+function _fechStLabel(s){return{em_processamento:'Em processamento',em_revisao:'Simulação ok',bloqueado_por_pendencias:'Bloqueado',pronto_para_validacao_dp:'Pronto para fechar',encerrado_internamente:'Fechado ✓',reaberto_para_ajuste:'Reaberto',validado_pela_supervisao_dp:'Validado'}[s]||'Em conferência';}
+function _fechStClass(s){return{em_revisao:'c-blue',bloqueado_por_pendencias:'c-red',pronto_para_validacao_dp:'c-grn',encerrado_internamente:'c-grn',reaberto_para_ajuste:'c-yel',em_processamento:'c-yel',validado_pela_supervisao_dp:'c-grn'}[s]||'c-gry';}
+
 async function fech(){
   const V=document.getElementById('view');
   const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
-  V.innerHTML=`<h2 class="page">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
-    <p class="sub">Relatório gerencial da competência.</p>
-    <section class="block"><p class="muted" style="text-align:center;padding:20px">Carregando dados...</p></section>`;
+  V.innerHTML=`<div style="padding:40px;text-align:center;color:var(--muted)">Carregando dados…</div>`;
 
+  // Status por empresa via RPC
+  const{data:stList,error:stErr}=await sb.rpc('get_mes_status',{p_competencia:MES_VIGENTE,p_company:null});
+  if(stErr){V.innerHTML=`<section class="block"><p class="muted">Erro ao carregar status: ${esc(stErr.message)}</p></section>`;return;}
+
+  // Dados HE/JB para tabelas gerenciais
   const hoje=new Date();
   const de=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().slice(0,10);
   const ate=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).toISOString().slice(0,10);
-
   const TIPOS_HE=['jornada_acima','possivel_hora_extra','possivel_extrapolacao_jornada'];
   const TIPOS_JB=['jornada_abaixo'];
-
-  let MGMT=[]; let from=0;
+  let MGMT=[];let mfrom=0;
   for(let i=0;i<10;i++){
-    const {data}=await sb.from('timekeeping_exceptions')
-      .select('solides_internal_id,display_name,plant,company,exception_type,evidence_minutes,analyzed_date,operational_note')
-      .eq('status','ignorada_por_regra')
-      .in('exception_type',[...TIPOS_HE,...TIPOS_JB])
-      .gte('analyzed_date',de).lte('analyzed_date',ate)
-      .range(from,from+999);
-    if(!data||!data.length)break; MGMT.push(...data); if(data.length<1000)break; from+=1000;
+    const{data}=await sb.from('timekeeping_exceptions')
+      .select('solides_internal_id,display_name,plant,company,exception_type,evidence_minutes,analyzed_date')
+      .eq('status','ignorada_por_regra').in('exception_type',[...TIPOS_HE,...TIPOS_JB])
+      .gte('analyzed_date',de).lte('analyzed_date',ate).range(mfrom,mfrom+999);
+    if(!data||!data.length)break;MGMT.push(...data);if(data.length<1000)break;mfrom+=1000;
   }
-
-  const aggr=(tipos)=>{const map=new Map();
-    for(const e of MGMT){if(!tipos.includes(e.exception_type))continue;
+  const aggr=(tipos,comp)=>{
+    const map=new Map();
+    for(const e of MGMT){
+      if(!tipos.includes(e.exception_type))continue;
+      if(comp&&e.company!==comp)continue;
       const k=e.solides_internal_id;
       if(!map.has(k))map.set(k,{sid:k,name:e.display_name,plant:e.plant,company:e.company||null,dias:new Set(),min:0});
       const a=map.get(k);a.dias.add(e.analyzed_date);a.min+=(e.evidence_minutes||0);
     }
     return[...map.values()].map(r=>({...r,dias:r.dias.size})).sort((a,b)=>b.min-a.min);
   };
+  const heAll=aggr(TIPOS_HE,null),jbAll=aggr(TIPOS_JB,null);
+  const empComErro=new Set(EXC.filter(e=>['aberta','confirmada'].includes(e.status)).map(e=>String(e.solides_internal_id)));
+  const sjAll=heAll.filter(r=>empComErro.has(String(r.sid)));
+  RELATORIO={heRows:heAll,jbRows:jbAll,sjRows:sjAll,mesLabel,mes:MES_VIGENTE};
 
-  const heRows=aggr(TIPOS_HE);
-  const jbRows=aggr(TIPOS_JB);
-
-  // HE sem justificativa = colaboradores com hora extra E com erros reais ainda abertos na fila da Andreia
-  const empComErroAberto=new Set(EXC.filter(e=>['aberta','confirmada'].includes(e.status)).map(e=>String(e.solides_internal_id)));
-  const sjRows=heRows.filter(r=>empComErroAberto.has(String(r.sid)));
-  RELATORIO={heRows,jbRows,sjRows,mesLabel,mes:MES_VIGENTE};
-
-  const {data:_st}=await sb.rpc('get_mes_status',{p_competencia:MES_VIGENTE});
-  const stRow=_st&&_st[0]; const isFechado=!!stRow;
-  const closedAt=isFechado?new Date(stRow.closed_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
-  const closedBy=isFechado?stRow.closed_by:'';
-
-  const mkTbl=(rows,cols,rowFn)=>`<div style="overflow-x:auto"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-    <tbody>${rows.length?rows.map(rowFn).join(''):`<tr><td colspan="${cols.length}" style="text-align:center;padding:20px" class="muted">Nenhum registro este mês</td></tr>`}</tbody></table></div>`;
-
+  const companies=stList||[];
+  const mkTbl=(rows,cols,rowFn)=>`<div style="overflow-x:auto"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(rowFn).join(''):`<tr><td colspan="${cols.length}" style="text-align:center;padding:16px" class="muted">Nenhum registro</td></tr>`}</tbody></table></div>`;
   const badge=(n,c)=>`<span class="pill ${c}" style="font-size:12px;margin-left:8px">${n} colaborador${n!==1?'es':''}</span>`;
 
-  V.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
-      <h2 class="page" style="margin:0">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
-      <div style="display:flex;gap:8px">
-        <button class="btn" id="btn-pdf">⬇ PDF</button>
-        <button class="btn g" id="btn-xls">⬇ Excel</button>
+  if(!FECH_COMPANY){
+    // ── VISÃO GRADE: todas as empresas ──────────────────────────────
+    const fechadas=companies.filter(s=>s.status==='encerrado_internamente').length;
+    const bloq=companies.filter(s=>s.status==='bloqueado_por_pendencias').length;
+    const prontas=companies.filter(s=>s.status==='pronto_para_validacao_dp').length;
+    const compRows=companies.map(s=>{
+      const nome=s.company.replace(/\s*\(.*\)$/,'');
+      const cnpj=(s.company.match(/\(([^)]+)\)/)||[])[1]||'';
+      const isFechado=s.status==='encerrado_internamente';
+      const isOk=s.status==='em_revisao';
+      const isPronto=s.status==='pronto_para_validacao_dp';
+      const canClose=ROLE==='owner'||ROLE==='supervisor_dp';
+      return `<tr data-c="${esc(s.company)}" style="cursor:pointer" title="Clique para detalhes">
+        <td><b>${esc(nome)}</b><div style="font-size:11px;color:var(--muted)">${esc(cnpj)}</div></td>
+        <td><span class="pill ${_fechStClass(s.status)}">${_fechStLabel(s.status)}</span></td>
+        <td style="text-align:center"><b style="color:${s.alta_aberta_count>0?'var(--vermelho)':'var(--verde)'}">${s.alta_aberta_count!=null?s.alta_aberta_count:'—'}</b></td>
+        <td style="text-align:center">${s.employees_analyzed??'—'}</td>
+        <td style="font-size:12px">${s.last_simulated_at?new Date(s.last_simulated_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'—'}</td>
+        <td style="white-space:nowrap">
+          ${!isFechado?`<button class="btn g _sim" data-c="${esc(s.company)}" style="font-size:12px;padding:5px 10px;margin-right:4px">Simular</button>`:''}
+          ${isOk&&canClose?`<button class="btn _pronto" data-c="${esc(s.company)}" style="font-size:12px;padding:5px 10px;margin-right:4px;background:var(--azul)">Pronto</button>`:''}
+          ${isPronto&&ROLE==='owner'?`<button class="btn _fechar" data-c="${esc(s.company)}" style="font-size:12px;padding:5px 10px;margin-right:4px;background:var(--verde)">Fechar</button>`:''}
+          ${isFechado&&ROLE==='owner'?`<button class="btn g _reabrir" data-c="${esc(s.company)}" style="font-size:12px;padding:5px 10px;margin-right:4px">Reabrir</button>`:''}
+          <button class="btn g _ver" data-c="${esc(s.company)}" style="font-size:12px;padding:5px 10px">Ver ›</button>
+        </td>
+      </tr>`;
+    }).join('');
+    V.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+        <h2 class="page" style="margin:0">Fechamento mensal <small style="font-size:13px;font-weight:400;color:#666;margin-left:8px">${mesLabel}</small></h2>
+        <div style="display:flex;gap:8px"><button class="btn" id="btn-pdf">⬇ PDF</button><button class="btn g" id="btn-xls">⬇ Excel</button></div>
       </div>
-    </div>
-    <p class="sub">Relatório gerencial · não inclui correções de ponto pendentes (ver aba Exceções).</p>
+      <p class="sub">Fechamento independente por empresa · ${companies.length} CNPJs ativos nesta competência.</p>
+      <div class="grid" style="margin-bottom:16px">
+        ${kpi('Fechadas',fechadas,`de ${companies.length} empresas`,fechadas===companies.length&&companies.length>0?'good':'blue')}
+        ${kpi('Bloqueadas',bloq,'pendências de alta gravidade',bloq>0?'alert':'good')}
+        ${kpi('Prontas p/ fechar',prontas,'aguardando confirmação owner','blue')}
+      </div>
+      <section class="block">
+        <h3>Status por empresa</h3>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Empresa</th><th>Status</th><th>Alta / Abertas</th><th>Colaboradores</th><th>Última simulação</th><th>Ações</th></tr></thead>
+          <tbody>${compRows||'<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nenhuma empresa com exceções nesta competência.</td></tr>'}</tbody>
+        </table></div>
+      </section>
+      <section class="block">
+        <h3>HE consolidado ${badge(heAll.length,'c-yel')}</h3>
+        <p class="note">Todas as empresas · excederam a jornada contratada em pelo menos um dia.</p>
+        ${mkTbl(heAll.slice(0,20),['Colaborador','Local','Empresa','Dias c/ HE','Total'],r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+        ${heAll.length>20?`<p class="note" style="text-align:center;margin-top:8px">…e mais ${heAll.length-20} colaboradores — exporte Excel para ver todos.</p>`:''}
+      </section>`;
+    document.getElementById('btn-pdf').onclick=gerarPDF;
+    document.getElementById('btn-xls').onclick=gerarExcel;
+    V.querySelectorAll('tr[data-c]').forEach(tr=>tr.onclick=e=>{if(e.target.closest('button'))return;FECH_COMPANY=tr.dataset.c;fech();});
+    V.querySelectorAll('._sim').forEach(b=>b.onclick=async e=>{e.stopPropagation();b.disabled=true;b.textContent='…';await doSimular(b.dataset.c);});
+    V.querySelectorAll('._pronto').forEach(b=>b.onclick=async e=>{e.stopPropagation();b.disabled=true;b.textContent='…';await doMarcarPronto(b.dataset.c);});
+    V.querySelectorAll('._fechar').forEach(b=>b.onclick=async e=>{e.stopPropagation();await doFechar(b.dataset.c);});
+    V.querySelectorAll('._reabrir').forEach(b=>b.onclick=async e=>{e.stopPropagation();await doReabrir(b.dataset.c);});
+    V.querySelectorAll('._ver').forEach(b=>b.onclick=e=>{e.stopPropagation();FECH_COMPANY=b.dataset.c;fech();});
 
-    <section class="block">
-      <h3>Horas extras ${badge(heRows.length,'c-yel')}</h3>
-      <p class="note">Colaboradores que excederam a jornada contratada em pelo menos um dia. O sistema de ponto calcula normalmente — exibido aqui para ciência gerencial.</p>
-      ${mkTbl(heRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
-    </section>
+  } else {
+    // ── VISÃO DETALHE: empresa específica ────────────────────────────
+    const sr=companies.find(s=>s.company===FECH_COMPANY)||{company:FECH_COMPANY,alta_aberta_count:0};
+    const nome=FECH_COMPANY.replace(/\s*\(.*\)$/,'');
+    const cnpj=(FECH_COMPANY.match(/\(([^)]+)\)/)||[])[1]||'';
+    const heC=aggr(TIPOS_HE,FECH_COMPANY),jbC=aggr(TIPOS_JB,FECH_COMPANY);
+    const sjC=heC.filter(r=>empComErro.has(String(r.sid)));
+    RELATORIO={heRows:heC,jbRows:jbC,sjRows:sjC,mesLabel:`${mesLabel} · ${nome}`,mes:MES_VIGENTE};
 
-    <section class="block">
-      <h3>Abaixo da carga horária ${badge(jbRows.length,'c-red')}</h3>
-      <p class="note">Colaboradores com jornada inferior ao contratado em algum dia. O ponto calcula com o que foi registrado.</p>
-      ${mkTbl(jbRows,['Colaborador','Local de trabalho','Empresa','Dias','Déficit estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
-    </section>
+    const isFechado=sr.status==='encerrado_internamente';
+    const isBloq=sr.status==='bloqueado_por_pendencias';
+    const isOk=sr.status==='em_revisao';
+    const isPronto=sr.status==='pronto_para_validacao_dp';
+    const isReaberto=sr.status==='reaberto_para_ajuste';
+    const canClose=ROLE==='owner'||ROLE==='supervisor_dp';
 
-    <section class="block">
-      <h3>Horas extras sem justificativa ${badge(sjRows.length,'c-red')}</h3>
-      <p class="note">Colaboradores com horas extras <b>e</b> erros de batida em aberto na fila do DP. A hora extra pode ser consequência de marcação irregular (ex.: esqueceu de bater a saída). Requer análise antes do fechamento.</p>
-      ${mkTbl(sjRows,['Colaborador','Local de trabalho','Empresa','Dias c/ HE','Total estimado'],
-        r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td style="font-size:11px">${esc(r.company||'—')}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
-    </section>
+    const checks=[
+      {ok:sr.status!=null&&!isBloq,lbl:'Exceções de alta gravidade',note:isBloq?`${sr.alta_aberta_count} em aberto — precisam ser tratadas`:sr.status==null?'Simulação não realizada':'Nenhuma exceção alta/aberta'},
+      {ok:sr.last_simulated_at!=null,lbl:'Simulação realizada',note:sr.last_simulated_at?`Nº ${sr.run_number} · ${new Date(sr.last_simulated_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`:'Simulação ainda não executada'},
+      {ok:isFechado||isPronto,lbl:'Pronto para fechar',note:isFechado?`Fechado em ${sr.closed_at?new Date(sr.closed_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'-'} por ${sr.closed_by||'-'}`:isPronto?'Marcado como pronto':'Aguardando validação do DP'},
+    ];
+    const checkHtml=checks.map(c=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--linha)">
+      <span style="font-size:18px;line-height:1">${c.ok?'✅':'❌'}</span>
+      <div><b>${c.lbl}</b><div style="font-size:12px;color:var(--muted);margin-top:2px">${c.note}</div></div>
+    </div>`).join('');
+    const altaCount=sr.alta_aberta_count!=null?sr.alta_aberta_count:'?';
+    const actBtns=isFechado
+      ?`${ROLE==='owner'?`<button class="btn g" id="b-reabrir" style="background:var(--amarelo);border-color:var(--amarelo)">Reabrir fechamento</button>`:''}`
+      :`<button class="btn g" id="b-sim">Simular novamente</button>
+        ${(isOk||isReaberto)&&canClose?`<button class="btn" id="b-pronto" style="background:var(--azul)">Marcar como Pronto</button>`:''}
+        ${isPronto&&ROLE==='owner'?`<button class="btn" id="b-fechar" style="background:var(--verde)">Fechar oficialmente</button>`:''}
+        ${isBloq&&ROLE==='owner'?`<button class="btn" id="b-fechar-bloq" style="background:var(--vermelho)">Fechar mesmo bloqueado</button>`:''}`;
 
-    <section class="block" style="border:2px solid ${isFechado?'var(--verde)':'var(--linha)'}">
-      <h3 style="color:${isFechado?'var(--verde)':'var(--ink)'}">${isFechado?'✓ Competência fechada':'Fechar competência'}</h3>
-      ${isFechado
-        ?`<p style="margin:0">Fechado em <b>${closedAt}</b> por <b>${closedBy}</b>. Snapshot salvo para a contabilidade.</p>`
-        :`<p class="note">Todos os erros de ponto devem estar tratados antes de fechar. O fechamento registra um snapshot permanente e não pode ser desfeito.</p>
-          <div style="margin-top:14px"><button class="btn" id="btn-fechar" style="background:var(--verde);font-size:14px;padding:10px 20px">Fechar ${mesLabel}</button></div>`
-      }
-    </section>`;
-  document.getElementById('btn-pdf').onclick=gerarPDF;
-  document.getElementById('btn-xls').onclick=gerarExcel;
-  if(!isFechado) document.getElementById('btn-fechar').onclick=fecharMes;
+    V.innerHTML=`
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn g" id="b-back">← Todas as empresas</button>
+        <h2 class="page" style="margin:0;flex:1">${esc(nome)} <small style="font-size:13px;font-weight:400;color:#666">${esc(cnpj)}</small></h2>
+        <div style="display:flex;gap:8px"><button class="btn" id="btn-pdf">⬇ PDF</button><button class="btn g" id="btn-xls">⬇ Excel</button></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <span class="pill ${_fechStClass(sr.status)}" style="font-size:14px;padding:6px 14px">${_fechStLabel(sr.status)}</span>
+        <span class="muted" style="font-size:13px">${mesLabel}</span>
+      </div>
+      <div class="grid" style="margin-bottom:16px">
+        ${kpi('Colaboradores',sr.employees_analyzed??'—','na competência','blue')}
+        ${kpi('Exceções totais',sr.exceptions_total??'—','registradas','blue')}
+        ${kpi('Alta / Abertas',altaCount,'precisam de tratamento',sr.alta_aberta_count>0?'alert':'good')}
+        ${kpi('Fechamento',isFechado?'Fechado ✓':'Pendente',isFechado?`por ${sr.closed_by||'—'}`:'Aguardando',isFechado?'good':'blue')}
+      </div>
+      <div class="row2" style="margin-bottom:16px">
+        <section class="block">
+          <h3>Checklist de validação</h3>
+          ${checkHtml}
+          <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">${actBtns}</div>
+        </section>
+        <section class="block">
+          <h3>Horas extras ${badge(heC.length,'c-yel')}</h3>
+          ${mkTbl(heC.slice(0,10),['Colaborador','Local','Dias c/ HE','Total'],r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+          ${heC.length>10?`<p class="note" style="margin:8px 0 0;text-align:center">+${heC.length-10} — exporte Excel para lista completa</p>`:''}
+        </section>
+      </div>
+      <div class="row2">
+        <section class="block">
+          <h3>Abaixo da carga ${badge(jbC.length,'c-red')}</h3>
+          ${mkTbl(jbC.slice(0,10),['Colaborador','Local','Dias','Déficit'],r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+        </section>
+        ${sjC.length?`<section class="block">
+          <h3>HE sem justificativa ${badge(sjC.length,'c-red')}</h3>
+          <p class="note">HE + erros de batida em aberto — revisar antes de fechar.</p>
+          ${mkTbl(sjC.slice(0,10),['Colaborador','Local','Dias','Total'],r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.plant)}</td><td>${r.dias}</td><td><b>${hmmfmt(r.min)}</b></td></tr>`)}
+        </section>`:'<section class="block"><h3>HE sem justificativa</h3><p class="muted">Nenhum colaborador com HE e batida em aberto.</p></section>'}
+      </div>`;
+
+    document.getElementById('b-back').onclick=()=>{FECH_COMPANY=null;fech();};
+    document.getElementById('btn-pdf').onclick=gerarPDF;
+    document.getElementById('btn-xls').onclick=gerarExcel;
+    const $=id=>document.getElementById(id);
+    if($('b-sim'))$('b-sim').onclick=async()=>{$('b-sim').disabled=true;$('b-sim').textContent='Simulando…';await doSimular(FECH_COMPANY);};
+    if($('b-pronto'))$('b-pronto').onclick=async()=>{$('b-pronto').disabled=true;$('b-pronto').textContent='Salvando…';await doMarcarPronto(FECH_COMPANY);};
+    if($('b-fechar'))$('b-fechar').onclick=async()=>{await doFechar(FECH_COMPANY);};
+    if($('b-fechar-bloq'))$('b-fechar-bloq').onclick=async()=>{await doFechar(FECH_COMPANY,true);};
+    if($('b-reabrir'))$('b-reabrir').onclick=async()=>{await doReabrir(FECH_COMPANY);};
+  }
 }
 
-async function fecharMes(){
-  if(!MES_VIGENTE)return;
-  const mesLabel=new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
-  const abertas=EXC.filter(e=>['aberta','aguardando_revisao','confirmada'].includes(e.status)).length;
-  const msg=abertas>0
-    ?`Atenção: ainda há ${abertas} exceção(ões) em aberto.\n\nDeseja fechar mesmo assim?`
-    :`Fechar a competência ${mesLabel}?\n\nEssa ação cria um snapshot permanente para a contabilidade e não pode ser desfeita.`;
-  if(!confirm(msg))return;
-  try{
-    const {error}=await sb.rpc('fechar_mes',{
-      p_competencia:MES_VIGENTE,
-      p_reviewer_id:USER.id,
-      p_reviewer_name:USER.email,
-      p_note:'Fechado pelo portal DP em '+new Date().toISOString()
-    });
-    if(error)throw error;
-    alert('Competência '+mesLabel+' fechada com sucesso!');
-    fech();
-  }catch(err){
-    alert('Erro ao fechar: '+err.message);
-  }
+async function doSimular(company){
+  const{data,error}=await sb.rpc('simular_fechamento',{p_competencia:MES_VIGENTE,p_company:company,p_reviewer_id:USER.id});
+  if(error){alert('Erro na simulação: '+error.message);fech();return;}
+  if(data&&!data.ok){alert(data.error);fech();return;}
+  showToast(`${company.replace(/\s*\(.*\)$/,'')}: ${_fechStLabel(data.status)}`);
+  fech();
+}
+async function doMarcarPronto(company){
+  const{data,error}=await sb.rpc('marcar_pronto_fechamento',{p_competencia:MES_VIGENTE,p_company:company,p_reviewer_id:USER.id,p_reviewer_name:USER.email});
+  if(error){alert('Erro: '+error.message);fech();return;}
+  if(data&&!data.ok){alert(data.error);fech();return;}
+  showToast('Marcado como pronto para fechar.');fech();
+}
+async function doFechar(company,forceBloqueado=false){
+  const nome=company.replace(/\s*\(.*\)$/,'');
+  const mesLabel=MES_VIGENTE?new Date(MES_VIGENTE+'-15').toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
+  const aviso=forceBloqueado?`⚠ ATENÇÃO: há pendências de alta gravidade em aberto.\n\n`:'';
+  const note=prompt(`${aviso}Fechar ${nome} — ${mesLabel}?\n\nNota de confirmação (obrigatória):`);
+  if(note===null)return;
+  if(!note.trim()){alert('A nota de confirmação é obrigatória.');return;}
+  const{data,error}=await sb.rpc('fechar_mes',{p_competencia:MES_VIGENTE,p_company:company,p_reviewer_id:USER.id,p_reviewer_name:USER.email,p_note:note.trim()});
+  if(error){alert('Erro ao fechar: '+error.message);fech();return;}
+  if(data&&!data.ok){alert(data.error);fech();return;}
+  showToast(`${nome} — ${mesLabel} fechado com sucesso.`);fech();
+}
+async function doReabrir(company){
+  const nome=company.replace(/\s*\(.*\)$/,'');
+  const reason=prompt(`Reabrir ${nome}?\n\nMotivo da reabertura (obrigatório):`);
+  if(reason===null)return;
+  if(!reason.trim()){alert('O motivo é obrigatório.');return;}
+  const{data,error}=await sb.rpc('reabrir_mes',{p_competencia:MES_VIGENTE,p_company:company,p_reviewer_id:USER.id,p_reviewer_name:USER.email,p_reason:reason.trim()});
+  if(error){alert('Erro ao reabrir: '+error.message);fech();return;}
+  if(data&&!data.ok){alert(data.error);fech();return;}
+  showToast(`${nome} reaberto para ajuste.`);fech();
 }
 
 function gerarPDF(){
